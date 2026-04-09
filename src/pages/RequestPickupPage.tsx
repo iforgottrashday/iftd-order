@@ -36,11 +36,6 @@ function getHourLabel(h: number): string {
   return `${h}:00 AM`
 }
 
-function isHourDisabled(hour: number, selectedDate: string): boolean {
-  const today = new Date().toISOString().split('T')[0]
-  if (selectedDate !== today) return false
-  return hour <= new Date().getHours()
-}
 
 interface NominatimResult {
   place_id: number
