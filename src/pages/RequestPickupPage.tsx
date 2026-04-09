@@ -4,9 +4,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Minus, Plus, Camera, ChevronDown, MapPin, Search } from 'lucide-react'
 
-// Pricing constants — match mobile app
-const TRASH_BASE = 15
-const TRASH_PER_BAG = 3
+// Pricing constants
+const TRASH_PER_BIN = 20
+const TRASH_UNBAGGED_PER_BIN = 5
 const RECYCLING_FLAT = 10
 const DISPOSAL_FEE = 5
 const SERVICE_FEE_RATE = 0.15
@@ -212,7 +212,7 @@ export default function RequestPickupPage() {
   const [addressData, setAddressData] = useState<AddressData | null>(null)
   const [homeAddress, setHomeAddress] = useState('')
   const [trashQty, setTrashQty] = useState(0)
-  const [trashBags, setTrashBags] = useState(1)
+  const [unbaggedQty, setUnbaggedQty] = useState(0)
   const [recyclingQty, setRecyclingQty] = useState(0)
   const [scheduledDate, setScheduledDate] = useState(getDefaultDate())
   const [scheduledHour, setScheduledHour] = useState(SERVICE_START)
@@ -261,8 +261,13 @@ export default function RequestPickupPage() {
     setPhotoPreview(file ? URL.createObjectURL(file) : null)
   }
 
+  const handleTrashQtyChange = (v: number) => {
+    setTrashQty(v)
+    if (unbaggedQty > v) setUnbaggedQty(v)
+  }
+
   // Pricing
-  const trashSubtotal = trashQty > 0 ? TRASH_BASE + trashBags * TRASH_PER_BAG * trashQty : 0
+  const trashSubtotal = trashQty > 0 ? TRASH_PER_BIN * trashQty + TRASH_UNBAGGED_PER_BIN * unbaggedQty : 0
   const recyclingSubtotal = recyclingQty > 0 ? RECYCLING_FLAT : 0
   const subtotal = trashSubtotal + recyclingSubtotal
   const disposalFee = subtotal > 0 ? DISPOSAL_FEE : 0
@@ -282,7 +287,7 @@ export default function RequestPickupPage() {
 
     const items = []
     if (trashQty > 0) {
-      items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, bags: trashBags })
+      items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, unbagged_qty: unbaggedQty })
     }
     if (recyclingQty > 0) {
       items.push({ product_id: 'recycling', label: 'Recycling', quantity: recyclingQty })
@@ -336,12 +341,12 @@ export default function RequestPickupPage() {
             <img src={PRODUCT_IMAGES.trash} alt="Trash" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Residential Trash</p>
-              <p className="text-xs text-[#666666]">$15 base + $3/bag per bin</p>
+              <p className="text-xs text-[#666666]">$20 per bin · +$5/bin for unbagged</p>
             </div>
           </div>
-          <StepperControl label="Trash bins" value={trashQty} min={0} max={10} onChange={setTrashQty} />
+          <StepperControl label="Trash bins" value={trashQty} min={0} max={10} onChange={handleTrashQtyChange} />
           {trashQty > 0 && (
-            <StepperControl label="Bags per bin" value={trashBags} min={1} max={10} onChange={setTrashBags} />
+            <StepperControl label="Unbagged bins" value={unbaggedQty} min={0} max={trashQty} onChange={setUnbaggedQty} />
           )}
         </div>
 
