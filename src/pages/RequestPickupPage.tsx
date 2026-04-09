@@ -2,12 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { Minus, Plus, Camera, ChevronDown, MapPin, Search } from 'lucide-react'
+import { Minus, Plus, Camera, MapPin, Search } from 'lucide-react'
 
 // Pricing constants
 const TRASH_PER_BIN = 20
 const TRASH_UNBAGGED_PER_BIN = 5
-const RECYCLING_FLAT = 10
+const RECYCLING_PER_BIN = 20
 const DISPOSAL_FEE = 5
 const SERVICE_FEE_RATE = 0.15
 
@@ -68,39 +68,78 @@ interface AddressData {
   state: string
 }
 
-function StepperControl({
-  label,
+function BigStepper({
   value,
   min,
   max,
   onChange,
 }: {
-  label: string
   value: number
   min: number
   max: number
   onChange: (v: number) => void
 }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-sm text-[#1A1A1A] flex-1">{label}</span>
-      <div className="flex items-center gap-2">
+    <div className="flex items-center justify-center gap-5 py-1">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(min, value - 1))}
+        disabled={value <= min}
+        className="w-12 h-12 rounded-full flex items-center justify-center disabled:bg-[#E0E0E0] bg-[#1A73E8]"
+      >
+        <Minus size={20} className="text-white" />
+      </button>
+      <span className="w-10 text-center text-2xl font-bold text-[#1A1A1A]">{value}</span>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={value >= max}
+        className="w-12 h-12 rounded-full flex items-center justify-center bg-[#1A73E8] disabled:bg-[#E0E0E0]"
+      >
+        <Plus size={20} className="text-white" />
+      </button>
+    </div>
+  )
+}
+
+function SmallStepper({
+  label,
+  desc,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string
+  desc?: string
+  value: number
+  min: number
+  max: number
+  onChange: (v: number) => void
+}) {
+  return (
+    <div className="flex items-center gap-3 pt-3 border-t border-[#E0E0E0]">
+      <div className="flex-1">
+        <p className="text-sm font-medium text-[#1A1A1A]">{label}</p>
+        {desc && <p className="text-xs text-[#666666] mt-0.5">{desc}</p>}
+      </div>
+      <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={() => onChange(Math.max(min, value - 1))}
           disabled={value <= min}
-          className="w-9 h-9 rounded-full border border-[#E0E0E0] flex items-center justify-center disabled:opacity-40"
+          className="w-10 h-10 rounded-full flex items-center justify-center disabled:bg-[#E0E0E0] bg-[#1A73E8]"
         >
-          <Minus size={16} />
+          <Minus size={16} className="text-white" />
         </button>
-        <span className="w-6 text-center font-semibold text-[#1A1A1A]">{value}</span>
+        <span className="w-6 text-center font-bold text-[#1A1A1A]">{value}</span>
         <button
           type="button"
           onClick={() => onChange(Math.min(max, value + 1))}
           disabled={value >= max}
-          className="w-9 h-9 rounded-full border border-[#E0E0E0] flex items-center justify-center disabled:opacity-40"
+          className="w-10 h-10 rounded-full flex items-center justify-center bg-[#1A73E8] disabled:bg-[#E0E0E0]"
         >
-          <Plus size={16} />
+          <Plus size={16} className="text-white" />
         </button>
       </div>
     </div>
@@ -268,7 +307,7 @@ export default function RequestPickupPage() {
 
   // Pricing
   const trashSubtotal = trashQty > 0 ? TRASH_PER_BIN * trashQty + TRASH_UNBAGGED_PER_BIN * unbaggedQty : 0
-  const recyclingSubtotal = recyclingQty > 0 ? RECYCLING_FLAT : 0
+  const recyclingSubtotal = recyclingQty > 0 ? RECYCLING_PER_BIN * recyclingQty : 0
   const subtotal = trashSubtotal + recyclingSubtotal
   const disposalFee = subtotal > 0 ? DISPOSAL_FEE : 0
   const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE * 100) / 100
@@ -311,114 +350,108 @@ export default function RequestPickupPage() {
   }
 
   const todayStr = new Date().toISOString().split('T')[0]
+  const isToday = scheduledDate === todayStr
+  const currentHour = new Date().getHours()
 
   return (
     <div className="px-4 py-6 flex flex-col gap-6 pb-36">
       <div>
-        <h1 className="text-2xl font-bold text-[#1A1A1A]">Request a Pickup</h1>
-        <p className="text-[#666666] text-sm mt-1">Fill in the details below</p>
+        <h1 className="text-2xl font-bold text-[#1A1A1A]">Order Trash Pickup</h1>
       </div>
 
-      {/* Address */}
+      {/* Step 1: Schedule */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-[#1A1A1A]">Pickup Address</h2>
-        <AddressSearch
-          initial={homeAddress}
-          onSelect={setAddressData}
-        />
-        {addressData && !addressData.lat && addressData.address && (
-          <p className="text-xs text-[#F59E0B] px-1">Search and select your address below to confirm location for pickup routing.</p>
-        )}
+        <h2 className="text-base font-bold text-[#1A1A1A]">Step 1: Choose a pickup time</h2>
+        <div className="flex flex-col gap-3 border border-[#E0E0E0] rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📅</span>
+              <input
+                type="date"
+                value={scheduledDate}
+                min={todayStr}
+                onChange={(e) => setScheduledDate(e.target.value)}
+                className="text-base font-semibold text-[#1A1A1A] border-none bg-transparent focus:outline-none"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-[#666666] flex items-center gap-1">
+              <span>🕐</span> Select an arrival window
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {Array.from({ length: SERVICE_END - SERVICE_START }, (_, i) => {
+                const h = SERVICE_START + i
+                const disabled = isToday && h <= currentHour
+                const selected = scheduledHour === h
+                return (
+                  <button
+                    key={h}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setScheduledHour(h)}
+                    className={`px-3 py-2 rounded-full border text-sm font-medium transition-colors ${
+                      selected
+                        ? 'bg-[#1A73E8] text-white border-[#1A73E8]'
+                        : disabled
+                        ? 'bg-[#F5F5F5] text-[#BDBDBD] border-[#E0E0E0]'
+                        : 'bg-white text-[#1A1A1A] border-[#E0E0E0]'
+                    }`}
+                  >
+                    {getHourLabel(h).replace(':00', '')}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
       </section>
 
-      {/* Items */}
+      {/* Step 2: Items */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-[#1A1A1A]">Items</h2>
+        <h2 className="text-base font-bold text-[#1A1A1A]">Step 2: What are you disposing of?</h2>
 
         {/* Trash */}
-        <div className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-3">
+        <div className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <img src={PRODUCT_IMAGES.trash} alt="Trash" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Residential Trash</p>
-              <p className="text-xs text-[#666666]">$20 per bin · +$5/bin for unbagged</p>
+              <p className="text-xs text-[#666666]">$20/unit · 96 gal max</p>
             </div>
+            <p className="text-[#1A73E8] font-bold text-base">${trashSubtotal > 0 ? (TRASH_PER_BIN * trashQty).toFixed(0) : '0'}</p>
           </div>
-          <StepperControl label="Trash bins" value={trashQty} min={0} max={10} onChange={handleTrashQtyChange} />
+          <BigStepper value={trashQty} min={0} max={10} onChange={handleTrashQtyChange} />
           {trashQty > 0 && (
-            <StepperControl label="Unbagged bins" value={unbaggedQty} min={0} max={trashQty} onChange={setUnbaggedQty} />
+            <SmallStepper
+              label="Unbagged bins (+$5/bin)"
+              desc="How many bins have loose/unbagged contents?"
+              value={unbaggedQty}
+              min={0}
+              max={trashQty}
+              onChange={setUnbaggedQty}
+            />
           )}
         </div>
 
         {/* Recycling */}
-        <div className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-3">
+        <div className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <img src={PRODUCT_IMAGES.recycling} alt="Recycling" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Recycling</p>
-              <p className="text-xs text-[#666666]">$10 flat</p>
+              <p className="text-xs text-[#666666]">$20/unit · 96 gal max</p>
             </div>
+            <p className="text-[#1A73E8] font-bold text-base">${recyclingSubtotal > 0 ? recyclingSubtotal.toFixed(0) : '0'}</p>
           </div>
-          <StepperControl label="Recycling bins" value={recyclingQty} min={0} max={10} onChange={setRecyclingQty} />
+          <BigStepper value={recyclingQty} min={0} max={10} onChange={setRecyclingQty} />
         </div>
       </section>
 
-      {/* Schedule */}
+      {/* Step 3: Photo */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-[#1A1A1A]">Schedule</h2>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm text-[#666666]">Date</label>
-            <input
-              type="date"
-              value={scheduledDate}
-              min={todayStr}
-              onChange={(e) => setScheduledDate(e.target.value)}
-              className="w-full border border-[#E0E0E0] rounded-lg px-4 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm text-[#666666]">Time Slot</label>
-            <div className="relative">
-              <select
-                value={scheduledHour}
-                onChange={(e) => setScheduledHour(Number(e.target.value))}
-                className="w-full border border-[#E0E0E0] rounded-lg px-4 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white appearance-none"
-              >
-                {Array.from({ length: SERVICE_END - SERVICE_START }, (_, i) => {
-                  const h = SERVICE_START + i
-                  const disabled = isHourDisabled(h, scheduledDate)
-                  return (
-                    <option key={h} value={h} disabled={disabled}>
-                      {getHourLabel(h)}{disabled ? ' (past)' : ''}
-                    </option>
-                  )
-                })}
-              </select>
-              <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#666666] pointer-events-none" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Notes */}
-      <section className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-[#1A1A1A]">
-          Notes for Hauler <span className="text-[#666666] font-normal text-sm">(optional)</span>
-        </h2>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="e.g. Bins are on the left side of the house. Gate code is 1234."
-          rows={3}
-          className="w-full border border-[#E0E0E0] rounded-lg px-4 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white resize-none"
-        />
-      </section>
-
-      {/* Photo */}
-      <section className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-[#1A1A1A]">
-          Photo <span className="text-[#666666] font-normal text-sm">(optional)</span>
+        <h2 className="text-base font-bold text-[#1A1A1A]">
+          Step 3: Photo of items <span className="text-[#EF4444] font-normal text-sm">*required</span>
         </h2>
         <input
           ref={photoRef}
@@ -443,39 +476,49 @@ export default function RequestPickupPage() {
           <button
             type="button"
             onClick={() => photoRef.current?.click()}
-            className="flex items-center justify-center gap-2 border-2 border-dashed border-[#E0E0E0] rounded-xl py-6 text-[#666666] text-sm"
+            className="border-2 border-dashed border-[#E0E0E0] rounded-xl py-8 flex flex-col items-center gap-2 text-[#666666]"
           >
-            <Camera size={20} />
-            Add a photo
+            <Camera size={28} />
+            <span className="font-medium text-sm">Tap to add photo</span>
+            <span className="text-xs">Take a photo or choose from library</span>
           </button>
         )}
       </section>
 
-      {/* Sticky price + CTA */}
-      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 flex flex-col gap-3">
-        {hasItems && (
-          <div className="flex flex-col gap-1 text-sm">
-            <div className="flex justify-between text-[#666666]">
-              <span>Subtotal</span><span>${subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-[#666666]">
-              <span>Disposal fee</span><span>${disposalFee.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-[#666666]">
-              <span>Service fee (15%)</span><span>${serviceFee.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between font-bold text-[#1A1A1A] text-base pt-1 border-t border-[#E0E0E0]">
-              <span>Total</span><span>${total.toFixed(2)}</span>
-            </div>
-          </div>
+      {/* Step 4: Notes */}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-base font-bold text-[#1A1A1A]">Step 4: Notes for your hauler <span className="font-normal text-[#666666] text-sm">(optional)</span></h2>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="e.g. Cans are on the left side of the driveway..."
+          rows={3}
+          className="w-full border border-[#E0E0E0] rounded-xl px-4 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white resize-none"
+        />
+      </section>
+
+      {/* Step 5: Address */}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-base font-bold text-[#1A1A1A]">Step 5: Pickup location</h2>
+        <AddressSearch initial={homeAddress} onSelect={setAddressData} />
+        {addressData && !addressData.lat && addressData.address && (
+          <p className="text-xs text-[#F59E0B] px-1">Search and select your address to confirm location for pickup routing.</p>
         )}
+      </section>
+
+      {/* Sticky footer */}
+      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs text-[#666666]">Estimated Total</p>
+          <p className="text-2xl font-bold text-[#1A73E8]">${total.toFixed(2)}</p>
+        </div>
         <button
           type="button"
           onClick={handleReview}
-          disabled={!hasItems || !addressData}
-          className="w-full bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-50"
+          disabled={!hasItems || !addressData || !photoFile}
+          className="flex-1 bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-50 flex items-center justify-center gap-2"
         >
-          Review Order
+          Continue →
         </button>
       </div>
     </div>
