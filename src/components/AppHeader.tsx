@@ -18,8 +18,8 @@ export default function AppHeader() {
     <header className="sticky top-0 z-50 bg-white border-b border-[#E0E0E0] shadow-sm">
       <div className="max-w-[480px] mx-auto px-4 h-14 flex items-center justify-between">
         {/* Brand */}
-        <Link to="/" className="text-[#1A73E8] font-bold text-lg tracking-tight">
-          iForgotTrashDay
+        <Link to="/" className="flex items-center">
+          <img src="/logo-wordmark.png" alt="iForgotTrashDay" className="h-8 object-contain" />
         </Link>
 
         {/* Right side */}
@@ -36,12 +36,7 @@ export default function AppHeader() {
 
               {menuOpen && (
                 <>
-                  {/* Backdrop */}
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setMenuOpen(false)}
-                  />
-                  {/* Dropdown */}
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                   <div className="absolute right-0 top-11 z-20 bg-white border border-[#E0E0E0] rounded-xl shadow-lg w-48 overflow-hidden">
                     <Link
                       to="/orders"

@@ -1,29 +1,56 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Trash2, Package, ArrowRight } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 
 export default function HomePage() {
+  const { user } = useAuth()
+  const [firstName, setFirstName] = useState('')
+
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('profiles')
+      .select('first_name')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.first_name) setFirstName(data.first_name)
+      })
+  }, [user])
+
   return (
     <div className="px-4 py-8 flex flex-col gap-8">
       {/* Hero */}
-      <div className="flex flex-col items-center text-center gap-4 pt-4">
-        <div className="w-16 h-16 bg-[#1A73E8] rounded-2xl flex items-center justify-center">
-          <Trash2 size={32} className="text-white" />
-        </div>
+      <div className="flex flex-col items-center text-center gap-4 pt-2">
+        <img src="/logo.png" alt="iForgotTrashDay" className="h-20 object-contain" />
         <div>
-          <h1 className="text-3xl font-bold text-[#1A1A1A] leading-tight">
-            Missed trash day?
-          </h1>
-          <p className="text-xl text-[#FF6600] font-semibold mt-1">
-            We've got you.
-          </p>
+          {user && firstName ? (
+            <>
+              <h1 className="text-2xl font-bold text-[#1A1A1A]">
+                Hey, {firstName}!
+              </h1>
+              <p className="text-[#666666] text-base mt-1">Ready to schedule a pickup?</p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-3xl font-bold text-[#1A1A1A] leading-tight">
+                Missed trash day?
+              </h1>
+              <p className="text-xl text-[#FF6600] font-semibold mt-1">
+                We've got you.
+              </p>
+              <p className="text-[#666666] text-base mt-2 max-w-xs mx-auto">
+                On-demand trash pickup by neighbors who care. No judgment — just help.
+              </p>
+            </>
+          )}
         </div>
-        <p className="text-[#666666] text-base max-w-xs">
-          On-demand trash pickup by neighbors who care. No judgment — just help.
-        </p>
 
         <Link
           to="/request"
-          className="w-full bg-[#1A73E8] text-white font-semibold text-lg py-4 rounded-xl flex items-center justify-center gap-2 mt-2 active:opacity-90"
+          className="w-full bg-[#1A73E8] text-white font-semibold text-lg py-4 rounded-xl flex items-center justify-center gap-2 mt-2"
         >
           Request a Pickup
           <ArrowRight size={20} />
@@ -38,7 +65,7 @@ export default function HomePage() {
         <div className="grid grid-cols-2 gap-3">
           <Link
             to="/request"
-            className="bg-[#F5F5F5] border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2 active:bg-[#E0E0E0]"
+            className="bg-[#F5F5F5] border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2"
           >
             <div className="w-10 h-10 bg-[#1A73E8] rounded-lg flex items-center justify-center">
               <Trash2 size={20} className="text-white" />
@@ -51,7 +78,7 @@ export default function HomePage() {
 
           <Link
             to="/orders"
-            className="bg-[#F5F5F5] border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2 active:bg-[#E0E0E0]"
+            className="bg-[#F5F5F5] border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2"
           >
             <div className="w-10 h-10 bg-[#FF6600] rounded-lg flex items-center justify-center">
               <Package size={20} className="text-white" />

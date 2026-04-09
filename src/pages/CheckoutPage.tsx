@@ -13,6 +13,10 @@ interface OrderItem {
 
 interface OrderState {
   address: string
+  latitude: number
+  longitude: number
+  location_county: string
+  location_state: string
   items: OrderItem[]
   scheduledDate: string
   scheduledHour: number
@@ -61,7 +65,7 @@ export default function CheckoutPage() {
     )
   }
 
-  const { address, items, scheduledDate, scheduledHour, notes, pricing } = state
+  const { address, latitude, longitude, location_county, location_state, items, scheduledDate, scheduledHour, notes, pricing } = state
 
   const handlePlaceOrder = async () => {
     if (!user) return
@@ -87,6 +91,10 @@ export default function CheckoutPage() {
           scheduled_date: scheduledDate,
           scheduled_hour: scheduledHour,
           address: address,
+          latitude: latitude || null,
+          longitude: longitude || null,
+          location_county: location_county || null,
+          location_state: location_state || null,
           private_notes: notes || null,
           pricing: pricing,
           payment_result: mockPayment,

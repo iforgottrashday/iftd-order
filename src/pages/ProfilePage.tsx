@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { User, Save } from 'lucide-react'
+import { Save, Copy, Check } from 'lucide-react'
 
 interface Profile {
   first_name: string
@@ -11,6 +11,8 @@ interface Profile {
   city: string
   state: string
   zip: string
+  points_balance: number
+  referral_code: string
 }
 
 export default function ProfilePage() {
@@ -23,37 +25,38 @@ export default function ProfilePage() {
     city: '',
     state: '',
     zip: '',
+    points_balance: 0,
+    referral_code: '',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (!user) return
-
-    const fetchProfile = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('first_name, last_name, phone, home_address, city, state, zip')
-        .eq('id', user.id)
-        .single()
-
-      if (data) {
-        setForm({
-          first_name: data.first_name ?? '',
-          last_name: data.last_name ?? '',
-          phone: data.phone ?? '',
-          home_address: data.home_address ?? '',
-          city: data.city ?? '',
-          state: data.state ?? '',
-          zip: data.zip ?? '',
-        })
-      }
-      setLoading(false)
-    }
-
-    fetchProfile()
+    supabase
+      .from('profiles')
+      .select('first_name, last_name, phone, home_address, city, state, zip, points_balance, referral_code')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setForm({
+            first_name: data.first_name ?? '',
+            last_name: data.last_name ?? '',
+            phone: data.phone ?? '',
+            home_address: data.home_address ?? '',
+            city: data.city ?? '',
+            state: data.state ?? '',
+            zip: data.zip ?? '',
+            points_balance: data.points_balance ?? 0,
+            referral_code: data.referral_code ?? '',
+          })
+        }
+        setLoading(false)
+      })
   }, [user])
 
   const update = (field: keyof Profile) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -89,6 +92,17 @@ export default function ProfilePage() {
     setSaving(false)
   }
 
+  const copyReferralCode = () => {
+    if (!form.referral_code) return
+    navigator.clipboard.writeText(form.referral_code).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const initials = [form.first_name[0], form.last_name[0]].filter(Boolean).join('').toUpperCase() || '?'
+  const displayName = [form.first_name, form.last_name].filter(Boolean).join(' ') || user?.email ?? ''
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -98,19 +112,36 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="px-4 py-6 flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-12 h-12 bg-[#1A73E8] rounded-full flex items-center justify-center">
-          <User size={22} className="text-white" />
+    <div className="flex flex-col">
+      {/* Avatar header */}
+      <div className="bg-[#1A73E8] px-4 py-6 flex flex-col items-center gap-2">
+        <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
+          <span className="text-white text-2xl font-bold">{initials}</span>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-[#1A1A1A]">Profile</h1>
-          <p className="text-[#666666] text-sm">{user?.email}</p>
-        </div>
+        <p className="text-white font-semibold text-lg">{displayName}</p>
+        <p className="text-white/70 text-sm">{user?.email}</p>
       </div>
 
-      <form onSubmit={handleSave} className="flex flex-col gap-4">
+      {/* Rewards banner */}
+      {(form.points_balance > 0 || form.referral_code) && (
+        <div className="bg-[#EBF3FD] border-b border-[#E0E0E0] px-4 py-4 flex items-center justify-between">
+          <div>
+            <p className="text-[#1A73E8] text-2xl font-bold">{form.points_balance} pts</p>
+            <p className="text-[#666666] text-xs mt-0.5">Earn 25 pts per referral · 100 pts = 1 free item</p>
+          </div>
+          {form.referral_code && (
+            <button
+              onClick={copyReferralCode}
+              className="flex items-center gap-1.5 bg-white border border-[#1A73E8] text-[#1A73E8] text-sm font-semibold px-3 py-2 rounded-xl"
+            >
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+              {form.referral_code}
+            </button>
+          )}
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="px-4 py-6 flex flex-col gap-4">
         {error && (
           <div className="bg-red-50 border border-[#EF4444] text-[#EF4444] text-sm px-4 py-3 rounded-lg">
             {error}
@@ -153,6 +184,15 @@ export default function ProfilePage() {
         <div>
           <p className="text-xs font-semibold text-[#666666] uppercase tracking-wider mb-2">Contact</p>
           <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-[#1A1A1A]">Email</label>
+              <input
+                type="email"
+                value={user?.email ?? ''}
+                disabled
+                className="w-full border border-[#E0E0E0] rounded-lg px-4 py-3 text-[#999] text-base bg-[#F5F5F5]"
+              />
+            </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="phone" className="text-sm font-medium text-[#1A1A1A]">Phone</label>
               <input
