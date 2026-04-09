@@ -101,7 +101,7 @@ export default function ProfilePage() {
   }
 
   const initials = [form.first_name[0], form.last_name[0]].filter(Boolean).join('').toUpperCase() || '?'
-  const displayName = [form.first_name, form.last_name].filter(Boolean).join(' ') || user?.email ?? ''
+  const displayName = [form.first_name, form.last_name].filter(Boolean).join(' ') || (user?.email ?? '')
 
   if (loading) {
     return (
