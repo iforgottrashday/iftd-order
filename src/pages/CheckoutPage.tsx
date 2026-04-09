@@ -21,6 +21,7 @@ interface OrderState {
   scheduledDate: string
   scheduledHour: number
   notes: string
+  privateNotes: string
   photoFile: File | null
   pricing: {
     subtotal: number
@@ -65,7 +66,7 @@ export default function CheckoutPage() {
     )
   }
 
-  const { address, latitude, longitude, location_county, location_state, items, scheduledDate, scheduledHour, notes, pricing } = state
+  const { address, latitude, longitude, location_county, location_state, items, scheduledDate, scheduledHour, notes, privateNotes, pricing } = state
 
   const handlePlaceOrder = async () => {
     if (!user) return
@@ -95,7 +96,7 @@ export default function CheckoutPage() {
           longitude: longitude || null,
           location_county: location_county || null,
           location_state: location_state || null,
-          private_notes: notes || null,
+          private_notes: [notes, privateNotes].filter(Boolean).join('\n\n') || null,
           pricing: pricing,
           payment_result: mockPayment,
         })

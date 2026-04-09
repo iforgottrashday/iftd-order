@@ -252,6 +252,7 @@ export default function RequestPickupPage() {
   const [scheduledDate, setScheduledDate] = useState(getDefaultDate())
   const [scheduledHour, setScheduledHour] = useState(SERVICE_START)
   const [notes, setNotes] = useState('')
+  const [privateNotes, setPrivateNotes] = useState('')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
@@ -344,6 +345,7 @@ export default function RequestPickupPage() {
         scheduledDate,
         scheduledHour,
         notes,
+        privateNotes,
         photoFile,
         pricing: { subtotal, disposalFee, serviceFee, total },
       },
@@ -441,7 +443,7 @@ export default function RequestPickupPage() {
             <img src={PRODUCT_IMAGES.recycling} alt="Recycling" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Recycling</p>
-              <p className="text-xs text-[#666666]">$20/unit · 96 gal max · must be bagged</p>
+              <p className="text-xs text-[#666666]">$20/unit · 96 gal max</p>
             </div>
             <p className="text-[#1A73E8] font-bold text-base">${recyclingSubtotal > 0 ? recyclingSubtotal.toFixed(0) : '0'}</p>
           </div>
@@ -506,6 +508,19 @@ export default function RequestPickupPage() {
           rows={3}
           className="w-full border border-[#E0E0E0] rounded-xl px-4 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white resize-none"
         />
+        <div className="flex flex-col gap-1.5">
+          <p className="text-sm font-semibold text-[#1A1A1A] flex items-center gap-1">
+            🔒 Gate code / access info <span className="font-normal text-[#666666]">(optional)</span>
+          </p>
+          <p className="text-xs text-[#666666]">Only visible to your hauler after they accept</p>
+          <textarea
+            value={privateNotes}
+            onChange={(e) => setPrivateNotes(e.target.value)}
+            placeholder="e.g. Gate code: 1234, ring doorbell on arrival..."
+            rows={2}
+            className="w-full border border-[#E0E0E0] rounded-xl px-4 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white resize-none"
+          />
+        </div>
       </section>
 
       {/* Step 5: Address */}
