@@ -62,8 +62,8 @@ interface NominatimResult {
 
 interface AddressData {
   address: string
-  lat: number
-  lng: number
+  lat: number | null
+  lng: number | null
   county: string
   state: string
 }
@@ -230,14 +230,12 @@ export default function RequestPickupPage() {
       .single()
       .then(({ data }) => {
         if (!data) return
-        const parts = [data.home_address, data.city, data.state, data.zip].filter(Boolean)
-        if (parts.length > 0) {
-          const addr = parts.join(', ')
-          setHomeAddress(addr)
+        if (data.home_address) {
+          setHomeAddress(data.home_address)
           setAddressData({
-            address: addr,
-            lat: data.home_lat ?? 0,
-            lng: data.home_lng ?? 0,
+            address: data.home_address,
+            lat: data.home_lat ?? null,
+            lng: data.home_lng ?? null,
             county: data.county ?? '',
             state: data.state ?? '',
           })
@@ -323,8 +321,8 @@ export default function RequestPickupPage() {
           initial={homeAddress}
           onSelect={setAddressData}
         />
-        {addressData && !addressData.lat && (
-          <p className="text-xs text-[#F59E0B] px-1">Address selected but location not confirmed — try searching again for precise results.</p>
+        {addressData && !addressData.lat && addressData.address && (
+          <p className="text-xs text-[#F59E0B] px-1">Search and select your address below to confirm location for pickup routing.</p>
         )}
       </section>
 

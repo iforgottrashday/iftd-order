@@ -13,8 +13,8 @@ interface OrderItem {
 
 interface OrderState {
   address: string
-  latitude: number
-  longitude: number
+  latitude: number | null
+  longitude: number | null
   location_county: string
   location_state: string
   items: OrderItem[]
