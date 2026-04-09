@@ -246,8 +246,9 @@ export default function RequestPickupPage() {
   const [addressData, setAddressData] = useState<AddressData | null>(null)
   const [homeAddress, setHomeAddress] = useState('')
   const [trashQty, setTrashQty] = useState(0)
-  const [unbaggedQty, setUnbaggedQty] = useState(0)
+  const [unbaggedTrashQty, setUnbaggedTrashQty] = useState(0)
   const [recyclingQty, setRecyclingQty] = useState(0)
+  const [unbaggedRecyclingQty, setUnbaggedRecyclingQty] = useState(0)
   const [scheduledDate, setScheduledDate] = useState(getDefaultDate())
   const [scheduledHour, setScheduledHour] = useState(SERVICE_START)
   const [notes, setNotes] = useState('')
@@ -297,12 +298,17 @@ export default function RequestPickupPage() {
 
   const handleTrashQtyChange = (v: number) => {
     setTrashQty(v)
-    if (unbaggedQty > v) setUnbaggedQty(v)
+    if (unbaggedTrashQty > v) setUnbaggedTrashQty(v)
+  }
+
+  const handleRecyclingQtyChange = (v: number) => {
+    setRecyclingQty(v)
+    if (unbaggedRecyclingQty > v) setUnbaggedRecyclingQty(v)
   }
 
   // Pricing
-  const trashSubtotal = trashQty > 0 ? TRASH_PER_BIN * trashQty + TRASH_UNBAGGED_PER_BIN * unbaggedQty : 0
-  const recyclingSubtotal = recyclingQty > 0 ? RECYCLING_PER_BIN * recyclingQty : 0
+  const trashSubtotal = trashQty > 0 ? TRASH_PER_BIN * trashQty + TRASH_UNBAGGED_PER_BIN * unbaggedTrashQty : 0
+  const recyclingSubtotal = recyclingQty > 0 ? RECYCLING_PER_BIN * recyclingQty + TRASH_UNBAGGED_PER_BIN * unbaggedRecyclingQty : 0
   const subtotal = trashSubtotal + recyclingSubtotal
   const disposalFee = subtotal > 0 ? DISPOSAL_FEE : 0
   const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE * 100) / 100
@@ -321,10 +327,10 @@ export default function RequestPickupPage() {
 
     const items = []
     if (trashQty > 0) {
-      items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, unbagged_qty: unbaggedQty })
+      items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, unbagged_qty: unbaggedTrashQty })
     }
     if (recyclingQty > 0) {
-      items.push({ product_id: 'recycling', label: 'Recycling', quantity: recyclingQty })
+      items.push({ product_id: 'recycling', label: 'Recycling', quantity: recyclingQty, unbagged_qty: unbaggedRecyclingQty })
     }
 
     navigate('/checkout', {
@@ -421,10 +427,10 @@ export default function RequestPickupPage() {
             <SmallStepper
               label="Unbagged bins (+$5/bin)"
               desc="How many bins have loose/unbagged contents?"
-              value={unbaggedQty}
+              value={unbaggedTrashQty}
               min={0}
               max={trashQty}
-              onChange={setUnbaggedQty}
+              onChange={setUnbaggedTrashQty}
             />
           )}
         </div>
@@ -439,7 +445,17 @@ export default function RequestPickupPage() {
             </div>
             <p className="text-[#1A73E8] font-bold text-base">${recyclingSubtotal > 0 ? recyclingSubtotal.toFixed(0) : '0'}</p>
           </div>
-          <BigStepper value={recyclingQty} min={0} max={10} onChange={setRecyclingQty} />
+          <BigStepper value={recyclingQty} min={0} max={10} onChange={handleRecyclingQtyChange} />
+          {recyclingQty > 0 && (
+            <SmallStepper
+              label="Unbagged bins (+$5/bin)"
+              desc="How many bins have loose/unbagged contents?"
+              value={unbaggedRecyclingQty}
+              min={0}
+              max={recyclingQty}
+              onChange={setUnbaggedRecyclingQty}
+            />
+          )}
         </div>
       </section>
 
