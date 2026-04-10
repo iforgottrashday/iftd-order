@@ -114,7 +114,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="px-4 py-6 flex flex-col gap-6 pb-32">
+    <div className="px-4 py-6 flex flex-col gap-6 pb-44">
       <div>
         <h1 className="text-2xl font-bold text-[#1A1A1A]">Review Order</h1>
         <p className="text-[#666666] text-sm mt-1">Confirm your details before placing</p>
@@ -204,8 +204,8 @@ export default function CheckoutPage() {
         </div>
       </section>
 
-      {/* Place Order sticky footer */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4">
+      {/* Place Order sticky footer — sits above the bottom nav (z-40) */}
+      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 z-50">
         <button
           onClick={handlePlaceOrder}
           disabled={loading}
