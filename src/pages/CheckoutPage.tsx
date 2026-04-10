@@ -81,8 +81,6 @@ export default function CheckoutPage() {
         unbagged_qty: item.unbagged_qty ?? 0,
       }))
 
-      const mockPayment = { authorized: true, transactionId: `mock_${Date.now()}` }
-
       // Step 1: insert the order
       const { error: insertError } = await supabase
         .from('orders')
@@ -99,7 +97,6 @@ export default function CheckoutPage() {
           location_state: location_state || null,
           private_notes: [notes, privateNotes].filter(Boolean).join('\n\n') || null,
           pricing: pricing,
-          payment_result: mockPayment,
         })
 
       if (insertError) throw new Error(insertError.message)
