@@ -69,7 +69,7 @@ export default function CheckoutPage() {
   const { address, latitude, longitude, location_county, location_state, items, scheduledDate, scheduledHour, notes, privateNotes, pricing } = state
 
   const handlePlaceOrder = async () => {
-    if (!user) return
+    if (!user) { setError('Not signed in.'); return }
     setError('')
     setLoading(true)
 
@@ -83,7 +83,8 @@ export default function CheckoutPage() {
 
       const mockPayment = { authorized: true, transactionId: `mock_${Date.now()}` }
 
-      const { data, error: insertError } = await supabase
+      // Step 1: insert the order
+      const { error: insertError } = await supabase
         .from('orders')
         .insert({
           customer_id: user.id,
@@ -100,12 +101,26 @@ export default function CheckoutPage() {
           pricing: pricing,
           payment_result: mockPayment,
         })
+
+      if (insertError) throw new Error(insertError.message)
+
+      // Step 2: fetch the order we just created (avoids RLS read-back issues)
+      const { data: newOrder, error: fetchError } = await supabase
+        .from('orders')
         .select('id')
+        .eq('customer_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .single()
 
-      if (insertError) throw insertError
+      if (fetchError || !newOrder) {
+        // Insert succeeded but couldn't read back — go to orders list
+        navigate('/orders', { replace: true })
+        return
+      }
 
-      navigate(`/order-submitted/${data.id}`, { replace: true })
+      navigate(`/order-submitted/${newOrder.id}`, { replace: true })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to place order. Please try again.'
       setError(msg)

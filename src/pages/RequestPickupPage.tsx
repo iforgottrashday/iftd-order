@@ -438,7 +438,7 @@ export default function RequestPickupPage() {
       {/* Step 3: Photo */}
       <section className="flex flex-col gap-3">
         <h2 className="text-base font-bold text-[#1A1A1A]">
-          Step 3: Photo of items <span className="text-[#EF4444] font-normal text-sm">*required</span>
+          Step 3: Photo of items <span className="text-[#999999] font-normal text-sm">(optional)</span>
         </h2>
         <input
           ref={photoRef}
@@ -515,7 +515,7 @@ export default function RequestPickupPage() {
         <button
           type="button"
           onClick={handleReview}
-          disabled={!hasItems || !addressData || !photoFile}
+          disabled={!hasItems || !addressData}
           className="flex-1 bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-50 flex items-center justify-center gap-2"
         >
           Continue →
