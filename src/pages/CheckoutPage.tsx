@@ -8,7 +8,7 @@ interface OrderItem {
   product_id: string
   label: string
   quantity: number
-  bags?: number
+  unbagged_qty?: number
 }
 
 interface OrderState {
@@ -78,7 +78,7 @@ export default function CheckoutPage() {
         product_id: item.product_id,
         label: item.label,
         quantity: item.quantity,
-        ...(item.bags !== undefined ? { bags: item.bags } : {}),
+        unbagged_qty: item.unbagged_qty ?? 0,
       }))
 
       const mockPayment = { authorized: true, transactionId: `mock_${Date.now()}` }
@@ -153,16 +153,12 @@ export default function CheckoutPage() {
           Items
         </div>
         {items.map((item, i) => (
-          <div key={i} className="flex justify-between items-center">
-            <div>
-              <p className="text-[#1A1A1A] font-medium text-sm">{item.label}</p>
-              {item.bags !== undefined && (
-                <p className="text-[#666666] text-xs">{item.quantity} bin{item.quantity > 1 ? 's' : ''} × {item.bags} bag{item.bags > 1 ? 's' : ''}</p>
-              )}
-              {item.bags === undefined && (
-                <p className="text-[#666666] text-xs">Qty: {item.quantity}</p>
-              )}
-            </div>
+          <div key={i}>
+            <p className="text-[#1A1A1A] font-medium text-sm">{item.label}</p>
+            <p className="text-[#666666] text-xs">
+              Qty: {item.quantity}
+              {item.product_id === 'trash' && item.unbagged_qty ? ' · Unbagged' : ''}
+            </p>
           </div>
         ))}
 
@@ -175,18 +171,18 @@ export default function CheckoutPage() {
 
       {/* Pricing */}
       <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2">
-        <div className="flex justify-between text-sm text-[#666666]">
-          <span>Subtotal</span>
-          <span>${pricing.subtotal.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-sm text-[#666666]">
-          <span>Disposal fee</span>
-          <span>${pricing.disposalFee.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-sm text-[#666666]">
-          <span>Service fee (15%)</span>
-          <span>${pricing.serviceFee.toFixed(2)}</span>
-        </div>
+        {items.map((item, i) => (
+          <div key={i} className="flex justify-between text-sm text-[#666666]">
+            <span>{item.label}{item.quantity > 1 ? ` ×${item.quantity}` : ''}</span>
+            <span>${(20 * item.quantity).toFixed(2)}</span>
+          </div>
+        ))}
+        {items.some(item => item.product_id === 'trash' && (item as { unbagged_qty?: number }).unbagged_qty) && (
+          <div className="flex justify-between text-sm text-[#666666]">
+            <span>Unbagged trash</span>
+            <span>$5.00</span>
+          </div>
+        )}
         <div className="flex justify-between font-bold text-[#1A1A1A] text-base pt-2 border-t border-[#E0E0E0]">
           <span>Total</span>
           <span>${pricing.total.toFixed(2)}</span>

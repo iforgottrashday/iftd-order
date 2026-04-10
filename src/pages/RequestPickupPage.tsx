@@ -4,12 +4,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Minus, Plus, Camera, MapPin, Search } from 'lucide-react'
 
-// Pricing constants — must match mobile app spec
-const TRASH_BASE        = 15   // flat per-item base
-const TRASH_PER_BAG     = 3    // additional per bag/unit
-const RECYCLING_PER_BIN = 10
-const DISPOSAL_FEE      = 5
-const SERVICE_FEE_RATE  = 0.15
+// Pricing constants
+const ITEM_PRICE         = 20   // $20 per item (all types)
+const UNBAGGED_SURCHARGE = 5    // +$5 for unbagged trash option
 
 const SERVICE_START = 8
 const SERVICE_END = 17
@@ -203,6 +200,7 @@ export default function RequestPickupPage() {
   const [addressData, setAddressData] = useState<AddressData | null>(null)
   const [homeAddress, setHomeAddress] = useState('')
   const [trashQty, setTrashQty] = useState(0)
+  const [unbaggedTrash, setUnbaggedTrash] = useState(false)
   const [recyclingQty, setRecyclingQty] = useState(0)
   const [scheduledDate, setScheduledDate] = useState(getDefaultDate())
   const [scheduledHour, setScheduledHour] = useState(SERVICE_START)
@@ -252,17 +250,17 @@ export default function RequestPickupPage() {
     setPhotoPreview(file ? URL.createObjectURL(file) : null)
   }
 
-  const handleTrashQtyChange = (v: number) => setTrashQty(v)
+  const handleTrashQtyChange = (v: number) => {
+    setTrashQty(v)
+    if (v === 0) setUnbaggedTrash(false)
+  }
   const handleRecyclingQtyChange = (v: number) => setRecyclingQty(v)
 
-  // Pricing — trash: $15 base + $3/unit, recycling: $10/unit
-  const trashSubtotal     = trashQty > 0 ? TRASH_BASE + TRASH_PER_BAG * trashQty : 0
-  const recyclingSubtotal = recyclingQty > 0 ? RECYCLING_PER_BIN * recyclingQty : 0
-  const subtotal    = trashSubtotal + recyclingSubtotal
-  const disposalFee = subtotal > 0 ? DISPOSAL_FEE : 0
-  const serviceFee  = Math.round(subtotal * SERVICE_FEE_RATE * 100) / 100
-  const total       = subtotal + disposalFee + serviceFee
-  const hasItems    = trashQty > 0 || recyclingQty > 0
+  // Pricing: $20/item, optional +$5 unbagged surcharge on trash
+  const trashSubtotal     = ITEM_PRICE * trashQty + (unbaggedTrash && trashQty > 0 ? UNBAGGED_SURCHARGE : 0)
+  const recyclingSubtotal = ITEM_PRICE * recyclingQty
+  const total    = trashSubtotal + recyclingSubtotal
+  const hasItems = trashQty > 0 || recyclingQty > 0
 
   const handleReview = () => {
     if (!addressData || !addressData.address.trim()) {
@@ -276,7 +274,7 @@ export default function RequestPickupPage() {
 
     const items = []
     if (trashQty > 0) {
-      items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, unbagged_qty: 0 })
+      items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, unbagged_qty: unbaggedTrash ? 1 : 0 })
     }
     if (recyclingQty > 0) {
       items.push({ product_id: 'recycling', label: 'Recycling', quantity: recyclingQty, unbagged_qty: 0 })
@@ -295,7 +293,7 @@ export default function RequestPickupPage() {
         notes,
         privateNotes,
         photoFile,
-        pricing: { subtotal, disposalFee, serviceFee, total },
+        pricing: { subtotal: total, disposalFee: 0, serviceFee: 0, total },
       },
     })
   }
@@ -368,11 +366,25 @@ export default function RequestPickupPage() {
             <img src={PRODUCT_IMAGES.trash} alt="Trash" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Residential Trash</p>
-              <p className="text-xs text-[#666666]">$15 base + $3/bag · 96 gal max</p>
+              <p className="text-xs text-[#666666]">$20/item · 96 gal max</p>
             </div>
             <p className="text-[#1A73E8] font-bold text-base">${trashSubtotal > 0 ? trashSubtotal.toFixed(0) : '0'}</p>
           </div>
           <BigStepper value={trashQty} min={0} max={10} onChange={handleTrashQtyChange} />
+          {trashQty > 0 && (
+            <label className="flex items-center gap-3 pt-3 border-t border-[#E0E0E0] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={unbaggedTrash}
+                onChange={e => setUnbaggedTrash(e.target.checked)}
+                className="w-5 h-5 accent-[#1A73E8]"
+              />
+              <div>
+                <p className="text-sm font-medium text-[#1A1A1A]">Unbagged trash (+$5)</p>
+                <p className="text-xs text-[#666666]">Contents are loose, not in bags</p>
+              </div>
+            </label>
+          )}
         </div>
 
         {/* Recycling */}
@@ -381,7 +393,7 @@ export default function RequestPickupPage() {
             <img src={PRODUCT_IMAGES.recycling} alt="Recycling" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Recycling</p>
-              <p className="text-xs text-[#666666]">$10/bin · 96 gal max</p>
+              <p className="text-xs text-[#666666]">$20/item · 96 gal max</p>
             </div>
             <p className="text-[#1A73E8] font-bold text-base">${recyclingSubtotal > 0 ? recyclingSubtotal.toFixed(0) : '0'}</p>
           </div>
