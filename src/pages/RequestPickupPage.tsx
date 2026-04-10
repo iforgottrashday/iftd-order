@@ -4,12 +4,12 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Minus, Plus, Camera, MapPin, Search } from 'lucide-react'
 
-// Pricing constants
-const TRASH_PER_BIN = 20
-const TRASH_UNBAGGED_PER_BIN = 5
-const RECYCLING_PER_BIN = 20
-const DISPOSAL_FEE = 5
-const SERVICE_FEE_RATE = 0.15
+// Pricing constants — must match mobile app spec
+const TRASH_BASE        = 15   // flat per-item base
+const TRASH_PER_BAG     = 3    // additional per bag/unit
+const RECYCLING_PER_BIN = 10
+const DISPOSAL_FEE      = 5
+const SERVICE_FEE_RATE  = 0.15
 
 const SERVICE_START = 8
 const SERVICE_END = 17
@@ -97,49 +97,6 @@ function BigStepper({
   )
 }
 
-function SmallStepper({
-  label,
-  desc,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string
-  desc?: string
-  value: number
-  min: number
-  max: number
-  onChange: (v: number) => void
-}) {
-  return (
-    <div className="flex items-center gap-3 pt-3 border-t border-[#E0E0E0]">
-      <div className="flex-1">
-        <p className="text-sm font-medium text-[#1A1A1A]">{label}</p>
-        {desc && <p className="text-xs text-[#666666] mt-0.5">{desc}</p>}
-      </div>
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => onChange(Math.max(min, value - 1))}
-          disabled={value <= min}
-          className="w-10 h-10 rounded-full flex items-center justify-center disabled:bg-[#E0E0E0] bg-[#1A73E8]"
-        >
-          <Minus size={16} className="text-white" />
-        </button>
-        <span className="w-6 text-center font-bold text-[#1A1A1A]">{value}</span>
-        <button
-          type="button"
-          onClick={() => onChange(Math.min(max, value + 1))}
-          disabled={value >= max}
-          className="w-10 h-10 rounded-full flex items-center justify-center bg-[#1A73E8] disabled:bg-[#E0E0E0]"
-        >
-          <Plus size={16} className="text-white" />
-        </button>
-      </div>
-    </div>
-  )
-}
 
 function AddressSearch({
   initial,
@@ -246,9 +203,7 @@ export default function RequestPickupPage() {
   const [addressData, setAddressData] = useState<AddressData | null>(null)
   const [homeAddress, setHomeAddress] = useState('')
   const [trashQty, setTrashQty] = useState(0)
-  const [unbaggedTrashQty, setUnbaggedTrashQty] = useState(0)
   const [recyclingQty, setRecyclingQty] = useState(0)
-  const [unbaggedRecyclingQty, setUnbaggedRecyclingQty] = useState(0)
   const [scheduledDate, setScheduledDate] = useState(getDefaultDate())
   const [scheduledHour, setScheduledHour] = useState(SERVICE_START)
   const [notes, setNotes] = useState('')
@@ -297,24 +252,17 @@ export default function RequestPickupPage() {
     setPhotoPreview(file ? URL.createObjectURL(file) : null)
   }
 
-  const handleTrashQtyChange = (v: number) => {
-    setTrashQty(v)
-    if (unbaggedTrashQty > v) setUnbaggedTrashQty(v)
-  }
+  const handleTrashQtyChange = (v: number) => setTrashQty(v)
+  const handleRecyclingQtyChange = (v: number) => setRecyclingQty(v)
 
-  const handleRecyclingQtyChange = (v: number) => {
-    setRecyclingQty(v)
-    if (unbaggedRecyclingQty > v) setUnbaggedRecyclingQty(v)
-  }
-
-  // Pricing
-  const trashSubtotal = trashQty > 0 ? TRASH_PER_BIN * trashQty + TRASH_UNBAGGED_PER_BIN * unbaggedTrashQty : 0
-  const recyclingSubtotal = recyclingQty > 0 ? RECYCLING_PER_BIN * recyclingQty + TRASH_UNBAGGED_PER_BIN * unbaggedRecyclingQty : 0
-  const subtotal = trashSubtotal + recyclingSubtotal
+  // Pricing — trash: $15 base + $3/unit, recycling: $10/unit
+  const trashSubtotal     = trashQty > 0 ? TRASH_BASE + TRASH_PER_BAG * trashQty : 0
+  const recyclingSubtotal = recyclingQty > 0 ? RECYCLING_PER_BIN * recyclingQty : 0
+  const subtotal    = trashSubtotal + recyclingSubtotal
   const disposalFee = subtotal > 0 ? DISPOSAL_FEE : 0
-  const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE * 100) / 100
-  const total = subtotal + disposalFee + serviceFee
-  const hasItems = trashQty > 0 || recyclingQty > 0
+  const serviceFee  = Math.round(subtotal * SERVICE_FEE_RATE * 100) / 100
+  const total       = subtotal + disposalFee + serviceFee
+  const hasItems    = trashQty > 0 || recyclingQty > 0
 
   const handleReview = () => {
     if (!addressData || !addressData.address.trim()) {
@@ -328,10 +276,10 @@ export default function RequestPickupPage() {
 
     const items = []
     if (trashQty > 0) {
-      items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, unbagged_qty: unbaggedTrashQty })
+      items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, unbagged_qty: 0 })
     }
     if (recyclingQty > 0) {
-      items.push({ product_id: 'recycling', label: 'Recycling', quantity: recyclingQty, unbagged_qty: unbaggedRecyclingQty })
+      items.push({ product_id: 'recycling', label: 'Recycling', quantity: recyclingQty, unbagged_qty: 0 })
     }
 
     navigate('/checkout', {
@@ -420,21 +368,11 @@ export default function RequestPickupPage() {
             <img src={PRODUCT_IMAGES.trash} alt="Trash" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Residential Trash</p>
-              <p className="text-xs text-[#666666]">$20/unit · 96 gal max</p>
+              <p className="text-xs text-[#666666]">$15 base + $3/bag · 96 gal max</p>
             </div>
             <p className="text-[#1A73E8] font-bold text-base">${trashSubtotal > 0 ? trashSubtotal.toFixed(0) : '0'}</p>
           </div>
           <BigStepper value={trashQty} min={0} max={10} onChange={handleTrashQtyChange} />
-          {trashQty > 0 && (
-            <SmallStepper
-              label="Unbagged bins (+$5/bin)"
-              desc="How many bins have loose/unbagged contents?"
-              value={unbaggedTrashQty}
-              min={0}
-              max={trashQty}
-              onChange={setUnbaggedTrashQty}
-            />
-          )}
         </div>
 
         {/* Recycling */}
@@ -443,21 +381,11 @@ export default function RequestPickupPage() {
             <img src={PRODUCT_IMAGES.recycling} alt="Recycling" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Recycling</p>
-              <p className="text-xs text-[#666666]">$20/unit · 96 gal max</p>
+              <p className="text-xs text-[#666666]">$10/bin · 96 gal max</p>
             </div>
             <p className="text-[#1A73E8] font-bold text-base">${recyclingSubtotal > 0 ? recyclingSubtotal.toFixed(0) : '0'}</p>
           </div>
           <BigStepper value={recyclingQty} min={0} max={10} onChange={handleRecyclingQtyChange} />
-          {recyclingQty > 0 && (
-            <SmallStepper
-              label="Unbagged bins (+$5/bin)"
-              desc="How many bins have loose/unbagged contents?"
-              value={unbaggedRecyclingQty}
-              min={0}
-              max={recyclingQty}
-              onChange={setUnbaggedRecyclingQty}
-            />
-          )}
         </div>
       </section>
 
@@ -536,7 +464,7 @@ export default function RequestPickupPage() {
       <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 flex items-center justify-between gap-4">
         <div>
           <p className="text-xs text-[#666666]">Estimated Total</p>
-          <p className="text-2xl font-bold text-[#1A73E8]">${subtotal.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-[#1A73E8]">${total.toFixed(2)}</p>
         </div>
         <button
           type="button"
