@@ -95,6 +95,30 @@ function BigStepper({
 }
 
 
+function SmallStepper({ label, desc, value, min, max, onChange }: {
+  label: string; desc?: string; value: number; min: number; max: number; onChange: (v: number) => void
+}) {
+  return (
+    <div className="flex items-center gap-3 pt-3 border-t border-[#E0E0E0]">
+      <div className="flex-1">
+        <p className="text-sm font-medium text-[#1A1A1A]">{label}</p>
+        {desc && <p className="text-xs text-[#666666] mt-0.5">{desc}</p>}
+      </div>
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}
+          className="w-10 h-10 rounded-full flex items-center justify-center disabled:bg-[#E0E0E0] bg-[#1A73E8]">
+          <Minus size={16} className="text-white" />
+        </button>
+        <span className="w-6 text-center font-bold text-[#1A1A1A]">{value}</span>
+        <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}
+          className="w-10 h-10 rounded-full flex items-center justify-center bg-[#1A73E8] disabled:bg-[#E0E0E0]">
+          <Plus size={16} className="text-white" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function AddressSearch({
   initial,
   onSelect,
@@ -200,8 +224,9 @@ export default function RequestPickupPage() {
   const [addressData, setAddressData] = useState<AddressData | null>(null)
   const [homeAddress, setHomeAddress] = useState('')
   const [trashQty, setTrashQty] = useState(0)
-  const [unbaggedTrash, setUnbaggedTrash] = useState(false)
+  const [unbaggedTrashQty, setUnbaggedTrashQty] = useState(0)
   const [recyclingQty, setRecyclingQty] = useState(0)
+  const [unbaggedRecyclingQty, setUnbaggedRecyclingQty] = useState(0)
   const [scheduledDate, setScheduledDate] = useState(getDefaultDate())
   const [scheduledHour, setScheduledHour] = useState(SERVICE_START)
   const [notes, setNotes] = useState('')
@@ -252,13 +277,16 @@ export default function RequestPickupPage() {
 
   const handleTrashQtyChange = (v: number) => {
     setTrashQty(v)
-    if (v === 0) setUnbaggedTrash(false)
+    if (unbaggedTrashQty > v) setUnbaggedTrashQty(v)
   }
-  const handleRecyclingQtyChange = (v: number) => setRecyclingQty(v)
+  const handleRecyclingQtyChange = (v: number) => {
+    setRecyclingQty(v)
+    if (unbaggedRecyclingQty > v) setUnbaggedRecyclingQty(v)
+  }
 
-  // Pricing: $20/item, optional +$5 unbagged surcharge on trash
-  const trashSubtotal     = ITEM_PRICE * trashQty + (unbaggedTrash && trashQty > 0 ? UNBAGGED_SURCHARGE : 0)
-  const recyclingSubtotal = ITEM_PRICE * recyclingQty
+  // Pricing: $20/item + $5 per unbagged item (trash or recycling)
+  const trashSubtotal     = ITEM_PRICE * trashQty + UNBAGGED_SURCHARGE * unbaggedTrashQty
+  const recyclingSubtotal = ITEM_PRICE * recyclingQty + UNBAGGED_SURCHARGE * unbaggedRecyclingQty
   const total    = trashSubtotal + recyclingSubtotal
   const hasItems = trashQty > 0 || recyclingQty > 0
 
@@ -274,10 +302,10 @@ export default function RequestPickupPage() {
 
     const items = []
     if (trashQty > 0) {
-      items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, unbagged_qty: unbaggedTrash ? 1 : 0 })
+      items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, unbagged_qty: unbaggedTrashQty })
     }
     if (recyclingQty > 0) {
-      items.push({ product_id: 'recycling', label: 'Recycling', quantity: recyclingQty, unbagged_qty: 0 })
+      items.push({ product_id: 'recycling', label: 'Recycling', quantity: recyclingQty, unbagged_qty: unbaggedRecyclingQty })
     }
 
     navigate('/checkout', {
@@ -372,18 +400,14 @@ export default function RequestPickupPage() {
           </div>
           <BigStepper value={trashQty} min={0} max={10} onChange={handleTrashQtyChange} />
           {trashQty > 0 && (
-            <label className="flex items-center gap-3 pt-3 border-t border-[#E0E0E0] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={unbaggedTrash}
-                onChange={e => setUnbaggedTrash(e.target.checked)}
-                className="w-5 h-5 accent-[#1A73E8]"
-              />
-              <div>
-                <p className="text-sm font-medium text-[#1A1A1A]">Unbagged trash (+$5)</p>
-                <p className="text-xs text-[#666666]">Contents are loose, not in bags</p>
-              </div>
-            </label>
+            <SmallStepper
+              label={`Unbagged (+$5 each)`}
+              desc="How many have loose/unbagged contents?"
+              value={unbaggedTrashQty}
+              min={0}
+              max={trashQty}
+              onChange={setUnbaggedTrashQty}
+            />
           )}
         </div>
 
@@ -398,6 +422,16 @@ export default function RequestPickupPage() {
             <p className="text-[#1A73E8] font-bold text-base">${recyclingSubtotal > 0 ? recyclingSubtotal.toFixed(0) : '0'}</p>
           </div>
           <BigStepper value={recyclingQty} min={0} max={10} onChange={handleRecyclingQtyChange} />
+          {recyclingQty > 0 && (
+            <SmallStepper
+              label={`Unbagged (+$5 each)`}
+              desc="How many have loose/unbagged contents?"
+              value={unbaggedRecyclingQty}
+              min={0}
+              max={recyclingQty}
+              onChange={setUnbaggedRecyclingQty}
+            />
+          )}
         </div>
       </section>
 

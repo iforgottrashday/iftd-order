@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
@@ -172,17 +172,19 @@ export default function CheckoutPage() {
       {/* Pricing */}
       <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2">
         {items.map((item, i) => (
-          <div key={i} className="flex justify-between text-sm text-[#666666]">
-            <span>{item.label}{item.quantity > 1 ? ` ×${item.quantity}` : ''}</span>
-            <span>${(20 * item.quantity).toFixed(2)}</span>
-          </div>
+          <React.Fragment key={i}>
+            <div className="flex justify-between text-sm text-[#666666]">
+              <span>{item.label}{item.quantity > 1 ? ` ×${item.quantity}` : ''}</span>
+              <span>${(20 * item.quantity).toFixed(2)}</span>
+            </div>
+            {(item.unbagged_qty ?? 0) > 0 && (
+              <div className="flex justify-between text-sm text-[#666666] pl-3">
+                <span>↳ Unbagged ×{item.unbagged_qty}</span>
+                <span>+${(5 * item.unbagged_qty!).toFixed(2)}</span>
+              </div>
+            )}
+          </React.Fragment>
         ))}
-        {items.some(item => item.product_id === 'trash' && (item as { unbagged_qty?: number }).unbagged_qty) && (
-          <div className="flex justify-between text-sm text-[#666666]">
-            <span>Unbagged trash</span>
-            <span>$5.00</span>
-          </div>
-        )}
         <div className="flex justify-between font-bold text-[#1A1A1A] text-base pt-2 border-t border-[#E0E0E0]">
           <span>Total</span>
           <span>${pricing.total.toFixed(2)}</span>
