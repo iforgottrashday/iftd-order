@@ -91,7 +91,7 @@ export default function CheckoutPage() {
           items: dbItems,
           scheduled_date: scheduledDate,
           scheduled_hour: scheduledHour,
-          address: address,
+          location: address,
           latitude: latitude || null,
           longitude: longitude || null,
           location_county: location_county || null,
@@ -119,12 +119,6 @@ export default function CheckoutPage() {
         <h1 className="text-2xl font-bold text-[#1A1A1A]">Review Order</h1>
         <p className="text-[#666666] text-sm mt-1">Confirm your details before placing</p>
       </div>
-
-      {error && (
-        <div className="bg-red-50 border border-[#EF4444] text-[#EF4444] text-sm px-4 py-3 rounded-lg">
-          {error}
-        </div>
-      )}
 
       {/* Address */}
       <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2">
@@ -203,7 +197,10 @@ export default function CheckoutPage() {
       </section>
 
       {/* Place Order sticky footer — sits above the bottom nav (z-40) */}
-      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 z-50">
+      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-3 z-50">
+        {error && (
+          <p className="text-[#EF4444] text-xs font-medium mb-2 text-center">{error}</p>
+        )}
         <button
           onClick={handlePlaceOrder}
           disabled={loading}

@@ -19,7 +19,7 @@ export default function AppHeader() {
       <div className="max-w-[480px] mx-auto px-4 h-14 flex items-center justify-between">
         {/* Brand */}
         <Link to="/" className="flex items-center">
-          <img src="/logo-wordmark.png" alt="iForgotTrashDay" className="h-8 object-contain" />
+          <img src="/logo-full.png" alt="iForgotTrashDay" className="h-9 object-contain" />
         </Link>
 
         {/* Right side */}
