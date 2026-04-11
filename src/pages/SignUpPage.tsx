@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { Trash2 } from 'lucide-react'
 
 export default function SignUpPage() {
   const navigate = useNavigate()
@@ -58,9 +57,7 @@ export default function SignUpPage() {
     <div className="px-4 py-8 flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col items-center gap-3 text-center">
-        <div className="w-14 h-14 bg-[#1A73E8] rounded-2xl flex items-center justify-center">
-          <Trash2 size={28} className="text-white" />
-        </div>
+        <img src="/logo-icon.png" alt="iForgotTrashDay" className="w-20 h-20 object-contain" />
         <div>
           <h1 className="text-2xl font-bold text-[#1A1A1A]">Create an account</h1>
           <p className="text-[#666666] text-sm mt-1">Get started in seconds</p>
