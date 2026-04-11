@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { MapPin, Clock, Package, CreditCard, Camera, Zap } from 'lucide-react'
+import { MapPin, Clock, Package, CreditCard, Camera, Zap, ArrowLeft } from 'lucide-react'
 
 interface OrderItem {
   product_id: string
@@ -113,8 +113,8 @@ export default function CheckoutPage() {
         longitude: longitude || null,
         location_county: location_county || null,
         location_state: location_state || null,
-        notes: notes || null,
-        private_notes: privateNotes || null,
+        notes: notes || '',
+        private_notes: privateNotes || '',
         photo_url: photoUrl,
         pricing: pricing,
       }
@@ -162,6 +162,13 @@ export default function CheckoutPage() {
   return (
     <div className="px-4 py-6 flex flex-col gap-6 pb-44">
       <div>
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-1 text-[#1A73E8] text-sm font-medium mb-3"
+        >
+          <ArrowLeft size={16} />
+          Edit Order
+        </button>
         <h1 className="text-2xl font-bold text-[#1A1A1A]">Review Order</h1>
         <p className="text-[#666666] text-sm mt-1">Confirm your details before placing</p>
       </div>
