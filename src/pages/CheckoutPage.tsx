@@ -214,6 +214,7 @@ export default function CheckoutPage() {
         private_notes: privateNotes || '',
         photo_url: photoUrl,
         pricing: pricing,
+        total: pricing.total,
       }
       console.log('[CheckoutPage] inserting order payload:', payload)
 
