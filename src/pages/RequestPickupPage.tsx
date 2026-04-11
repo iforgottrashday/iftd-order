@@ -8,11 +8,11 @@ import { Minus, Plus, Camera, MapPin, Search, Zap, CalendarDays, Clock, Lock, Al
 const ITEM_PRICE         = 20   // $20 per item (all types)
 const UNBAGGED_SURCHARGE = 5    // +$5 for unbagged trash option
 
-const SERVICE_START = 8
-const SERVICE_END = 17
+const SERVICE_START = 7   // 7am
+const SERVICE_END   = 14  // 2pm
 
-const INSTANT_START = 7   // 7am
-const INSTANT_END   = 14  // 2pm (cutoff — not available at or after)
+const INSTANT_START = SERVICE_START
+const INSTANT_END   = SERVICE_END
 
 // ── Federal holiday helpers ──────────────────────────────────────────────────
 
