@@ -87,13 +87,15 @@ const PRODUCT_IMAGES: Record<string, string> = {
   gas: '/products/gas.png',
 }
 
+/** Returns a YYYY-MM-DD string using local (device) time, not UTC. */
+function localDateStr(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function getDefaultDate(): string {
   const now = new Date()
   if (now.getHours() >= INSTANT_END) now.setDate(now.getDate() + 1)
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+  return localDateStr(now)
 }
 
 function getHourLabel(h: number): string {
@@ -333,7 +335,7 @@ export default function RequestPickupPage() {
 
   // Auto-set hour when date changes
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = localDateStr()
     if (scheduledDate === today) {
       const currentHour = new Date().getHours()
       const nextHour = Math.max(SERVICE_START, currentHour + 1)
@@ -401,7 +403,7 @@ export default function RequestPickupPage() {
     })
   }
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = localDateStr()
   const isToday = scheduledDate === todayStr
   const currentHour = new Date().getHours()
 
