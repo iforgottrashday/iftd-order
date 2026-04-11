@@ -309,20 +309,31 @@ export default function CheckoutPage() {
       </section>
 
       {/* Items */}
-      <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-3">
-        <div className="flex items-center gap-2 text-[#666666] text-sm font-medium">
+      <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-0">
+        <div className="flex items-center gap-2 text-[#666666] text-sm font-medium mb-3">
           <Package size={16} />
           Items
         </div>
-        {items.map((item, i) => (
-          <div key={i}>
-            <p className="text-[#1A1A1A] font-medium text-sm">{item.label}</p>
-            <p className="text-[#666666] text-xs">
-              Qty: {item.quantity}
-              {(item.unbagged_qty ?? 0) > 0 ? ` · Unbagged ×${item.unbagged_qty}` : ''}
-            </p>
-          </div>
-        ))}
+        {items.map((item, i) => {
+          const unbagged  = item.unbagged_qty ?? 0
+          const itemTotal = item.quantity * 20 + unbagged * 5
+          return (
+            <div key={i} className={`flex justify-between items-start py-2.5 ${i > 0 ? 'border-t border-[#F0F0F0]' : ''}`}>
+              <div className="flex flex-col gap-0.5">
+                <p className="text-[#1A1A1A] font-semibold text-sm">{item.label}</p>
+                <p className="text-[#666666] text-xs">
+                  {item.quantity} bin{item.quantity !== 1 ? 's' : ''} × $20.00
+                </p>
+                {unbagged > 0 && (
+                  <p className="text-amber-700 text-xs font-medium">
+                    ⚠ {unbagged} unbagged × $5.00 bagging fee
+                  </p>
+                )}
+              </div>
+              <p className="text-[#1A1A1A] text-sm font-semibold">${itemTotal.toFixed(2)}</p>
+            </div>
+          )
+        })}
 
         {notes ? (
           <div className="pt-2 border-t border-[#E0E0E0]">
@@ -352,23 +363,9 @@ export default function CheckoutPage() {
         </section>
       )}
 
-      {/* Pricing */}
-      <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2">
-        {items.map((item, i) => (
-          <React.Fragment key={i}>
-            <div className="flex justify-between text-sm text-[#666666]">
-              <span>{item.label}{item.quantity > 1 ? ` ×${item.quantity}` : ''}</span>
-              <span>${(20 * item.quantity).toFixed(2)}</span>
-            </div>
-            {(item.unbagged_qty ?? 0) > 0 && (
-              <div className="flex justify-between text-sm text-[#666666] pl-3">
-                <span>↳ Unbagged ×{item.unbagged_qty}</span>
-                <span>+${(5 * item.unbagged_qty!).toFixed(2)}</span>
-              </div>
-            )}
-          </React.Fragment>
-        ))}
-        <div className="flex justify-between font-bold text-[#1A1A1A] text-base pt-2 border-t border-[#E0E0E0]">
+      {/* Total */}
+      <section className="border border-[#E0E0E0] rounded-xl p-4">
+        <div className="flex justify-between font-bold text-[#1A1A1A] text-base">
           <span>Total</span>
           <span>${pricing.total.toFixed(2)}</span>
         </div>

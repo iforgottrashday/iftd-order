@@ -11,13 +11,16 @@ interface Order {
   location: string
   scheduled_date: string | null
   scheduled_hour: number | null
-  items: Array<{ product_id?: string; id?: string; label: string; quantity?: number; qty?: number; bags?: number }>
+  items: Array<{ product_id?: string; id?: string; label: string; quantity?: number; qty?: number; bags?: number; unbagged_qty?: number }>
   pricing: { subtotal: number; disposalFee: number; serviceFee: number; total: number } | null
   total: number | null
   photo_url: string | null
   private_notes: string | null
   created_at: string
 }
+
+const ITEM_PRICE       = 20
+const UNBAGGED_SURCHARGE = 5
 
 function getHourLabel(h: number): string {
   if (h === 12) return '12:00 PM'
@@ -202,23 +205,29 @@ export default function OrderStatusPage() {
       </section>
 
       {/* Items */}
-      <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-3">
-        <div className="flex items-center gap-2 text-[#666666] text-sm font-medium">
+      <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-0">
+        <div className="flex items-center gap-2 text-[#666666] text-sm font-medium mb-3">
           <Package size={16} />
           Items
         </div>
         {order.items.map((item, i) => {
-          const qty = item.quantity ?? item.qty ?? 0
+          const qty      = item.quantity ?? item.qty ?? 0
+          const unbagged = item.unbagged_qty ?? 0
+          const itemTotal = qty * ITEM_PRICE + unbagged * UNBAGGED_SURCHARGE
           return (
-            <div key={i} className="flex justify-between items-center">
-              <div>
-                <p className="text-[#1A1A1A] text-sm font-medium">{item.label}</p>
-                {item.bags !== undefined ? (
-                  <p className="text-[#666666] text-xs">{qty} bin{qty !== 1 ? 's' : ''} × {item.bags} bag{item.bags !== 1 ? 's' : ''}</p>
-                ) : (
-                  <p className="text-[#666666] text-xs">Qty: {qty}</p>
+            <div key={i} className={`flex justify-between items-start py-2.5 ${i > 0 ? 'border-t border-[#F0F0F0]' : ''}`}>
+              <div className="flex flex-col gap-0.5">
+                <p className="text-[#1A1A1A] text-sm font-semibold">{item.label}</p>
+                <p className="text-[#666666] text-xs">
+                  {qty} bin{qty !== 1 ? 's' : ''} × ${ITEM_PRICE.toFixed(2)}
+                </p>
+                {unbagged > 0 && (
+                  <p className="text-amber-700 text-xs font-medium">
+                    ⚠ {unbagged} unbagged × ${UNBAGGED_SURCHARGE.toFixed(2)} bagging fee
+                  </p>
                 )}
               </div>
+              <p className="text-[#1A1A1A] text-sm font-semibold">${itemTotal.toFixed(2)}</p>
             </div>
           )
         })}
@@ -243,25 +252,9 @@ export default function OrderStatusPage() {
         </section>
       )}
 
-      {/* Pricing */}
-      <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2">
-        {order.pricing ? (
-          <>
-            <div className="flex justify-between text-sm text-[#666666]">
-              <span>Subtotal</span>
-              <span>${order.pricing.subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm text-[#666666]">
-              <span>Disposal fee</span>
-              <span>${order.pricing.disposalFee.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm text-[#666666]">
-              <span>Service fee</span>
-              <span>${order.pricing.serviceFee.toFixed(2)}</span>
-            </div>
-          </>
-        ) : null}
-        <div className="flex justify-between font-bold text-[#1A1A1A] text-base pt-2 border-t border-[#E0E0E0]">
+      {/* Total */}
+      <section className="border border-[#E0E0E0] rounded-xl p-4">
+        <div className="flex justify-between font-bold text-[#1A1A1A] text-base">
           <span>Total</span>
           <span>${(order.pricing?.total ?? order.total ?? 0).toFixed(2)}</span>
         </div>
