@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { MapPin, Clock, Package, CreditCard } from 'lucide-react'
+import { MapPin, Clock, Package, CreditCard, Camera } from 'lucide-react'
 
 interface OrderItem {
   product_id: string
@@ -51,6 +51,10 @@ export default function CheckoutPage() {
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [photoPreview] = useState<string | null>(() => {
+    if (!state?.photoFile) return null
+    try { return URL.createObjectURL(state.photoFile) } catch { return null }
+  })
 
   if (!state) {
     return (
@@ -81,25 +85,34 @@ export default function CheckoutPage() {
         unbagged_qty: item.unbagged_qty ?? 0,
       }))
 
+      const payload = {
+        customer_id: user.id,
+        status: 'pending',
+        items: dbItems,
+        scheduled_date: scheduledDate,
+        scheduled_hour: scheduledHour,
+        location: address,
+        latitude: latitude || null,
+        longitude: longitude || null,
+        location_county: location_county || null,
+        location_state: location_state || null,
+        notes: notes || null,
+        private_notes: privateNotes || null,
+        pricing: pricing,
+      }
+      console.log('[CheckoutPage] inserting order payload:', payload)
+
       // Step 1: insert the order
       const { error: insertError } = await supabase
         .from('orders')
-        .insert({
-          customer_id: user.id,
-          status: 'pending',
-          items: dbItems,
-          scheduled_date: scheduledDate,
-          scheduled_hour: scheduledHour,
-          location: address,
-          latitude: latitude || null,
-          longitude: longitude || null,
-          location_county: location_county || null,
-          location_state: location_state || null,
-          private_notes: [notes, privateNotes].filter(Boolean).join('\n\n') || null,
-          pricing: pricing,
-        })
+        .insert(payload)
 
-      if (insertError) throw new Error(insertError.message)
+      if (insertError) {
+        console.error('[CheckoutPage] insert error:', insertError)
+        throw new Error(insertError.message)
+      }
+
+      console.log('[CheckoutPage] insert succeeded, fetching order id...')
 
       // Step 2: fetch the order we just created (avoids RLS read-back issues)
       const { data: newOrder, error: fetchError } = await supabase
@@ -112,15 +125,18 @@ export default function CheckoutPage() {
         .single()
 
       if (fetchError || !newOrder) {
-        // Insert succeeded but couldn't read back — go to orders list
+        console.warn('[CheckoutPage] fetch-back failed, going to /orders:', fetchError)
         navigate('/orders', { replace: true })
         return
       }
 
+      console.log('[CheckoutPage] navigating to order-submitted:', newOrder.id)
       navigate(`/order-submitted/${newOrder.id}`, { replace: true })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to place order. Please try again.'
+      console.error('[CheckoutPage] caught error:', err)
       setError(msg)
+    } finally {
       setLoading(false)
     }
   }
@@ -163,7 +179,7 @@ export default function CheckoutPage() {
             <p className="text-[#1A1A1A] font-medium text-sm">{item.label}</p>
             <p className="text-[#666666] text-xs">
               Qty: {item.quantity}
-              {item.product_id === 'trash' && item.unbagged_qty ? ' · Unbagged' : ''}
+              {(item.unbagged_qty ?? 0) > 0 ? ` · Unbagged ×${item.unbagged_qty}` : ''}
             </p>
           </div>
         ))}
@@ -174,6 +190,21 @@ export default function CheckoutPage() {
           </div>
         ) : null}
       </section>
+
+      {/* Photo */}
+      {photoPreview && (
+        <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-3">
+          <div className="flex items-center gap-2 text-[#666666] text-sm font-medium">
+            <Camera size={16} />
+            Photo
+          </div>
+          <img
+            src={photoPreview}
+            alt="Pickup area"
+            className="w-full rounded-lg object-cover max-h-48"
+          />
+        </section>
+      )}
 
       {/* Pricing */}
       <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2">

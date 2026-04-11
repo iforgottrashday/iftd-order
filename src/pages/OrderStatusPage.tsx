@@ -8,11 +8,12 @@ type OrderStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cance
 interface Order {
   id: string
   status: OrderStatus
-  address: string
-  scheduled_date: string
-  scheduled_hour: number
-  items: Array<{ product_id: string; label: string; quantity: number; bags?: number }>
-  pricing: { subtotal: number; disposalFee: number; serviceFee: number; total: number }
+  location: string
+  scheduled_date: string | null
+  scheduled_hour: number | null
+  items: Array<{ product_id?: string; id?: string; label: string; quantity?: number; qty?: number; bags?: number }>
+  pricing: { subtotal: number; disposalFee: number; serviceFee: number; total: number } | null
+  total: number | null
   private_notes: string | null
   created_at: string
 }
@@ -66,7 +67,7 @@ export default function OrderStatusPage() {
     const fetchOrder = async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select('id, status, address, scheduled_date, scheduled_hour, items, pricing, private_notes, created_at')
+        .select('id, status, location, scheduled_date, scheduled_hour, items, pricing, total, private_notes, created_at')
         .eq('id', orderId)
         .single()
 
@@ -178,7 +179,7 @@ export default function OrderStatusPage() {
           <MapPin size={16} />
           Pickup Address
         </div>
-        <p className="text-[#1A1A1A] font-medium text-sm">{order.address}</p>
+        <p className="text-[#1A1A1A] font-medium text-sm">{order.location}</p>
       </section>
 
       {/* Schedule */}
@@ -198,37 +199,44 @@ export default function OrderStatusPage() {
           <Package size={16} />
           Items
         </div>
-        {order.items.map((item, i) => (
-          <div key={i} className="flex justify-between items-center">
-            <div>
-              <p className="text-[#1A1A1A] text-sm font-medium">{item.label}</p>
-              {item.bags !== undefined ? (
-                <p className="text-[#666666] text-xs">{item.quantity} bin{item.quantity > 1 ? 's' : ''} × {item.bags} bag{item.bags > 1 ? 's' : ''}</p>
-              ) : (
-                <p className="text-[#666666] text-xs">Qty: {item.quantity}</p>
-              )}
+        {order.items.map((item, i) => {
+          const qty = item.quantity ?? item.qty ?? 0
+          return (
+            <div key={i} className="flex justify-between items-center">
+              <div>
+                <p className="text-[#1A1A1A] text-sm font-medium">{item.label}</p>
+                {item.bags !== undefined ? (
+                  <p className="text-[#666666] text-xs">{qty} bin{qty !== 1 ? 's' : ''} × {item.bags} bag{item.bags !== 1 ? 's' : ''}</p>
+                ) : (
+                  <p className="text-[#666666] text-xs">Qty: {qty}</p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </section>
 
       {/* Pricing */}
       <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2">
-        <div className="flex justify-between text-sm text-[#666666]">
-          <span>Subtotal</span>
-          <span>${order.pricing.subtotal.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-sm text-[#666666]">
-          <span>Disposal fee</span>
-          <span>${order.pricing.disposalFee.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-sm text-[#666666]">
-          <span>Service fee</span>
-          <span>${order.pricing.serviceFee.toFixed(2)}</span>
-        </div>
+        {order.pricing ? (
+          <>
+            <div className="flex justify-between text-sm text-[#666666]">
+              <span>Subtotal</span>
+              <span>${order.pricing.subtotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm text-[#666666]">
+              <span>Disposal fee</span>
+              <span>${order.pricing.disposalFee.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm text-[#666666]">
+              <span>Service fee</span>
+              <span>${order.pricing.serviceFee.toFixed(2)}</span>
+            </div>
+          </>
+        ) : null}
         <div className="flex justify-between font-bold text-[#1A1A1A] text-base pt-2 border-t border-[#E0E0E0]">
           <span>Total</span>
-          <span>${order.pricing.total.toFixed(2)}</span>
+          <span>${(order.pricing?.total ?? order.total ?? 0).toFixed(2)}</span>
         </div>
       </section>
     </div>

@@ -9,11 +9,12 @@ type OrderStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cance
 interface Order {
   id: string
   status: OrderStatus
-  address: string
-  scheduled_date: string
-  scheduled_hour: number
-  items: Array<{ product_id: string; label: string; quantity: number }>
-  pricing: { total: number }
+  location: string
+  scheduled_date: string | null
+  scheduled_hour: number | null
+  items: Array<{ product_id?: string; id?: string; label: string; quantity?: number; qty?: number }>
+  pricing: { total: number } | null
+  total: number | null
   created_at: string
 }
 
@@ -46,7 +47,7 @@ function StatusBadge({ status }: { status: OrderStatus }) {
 }
 
 function OrderRow({ order }: { order: Order }) {
-  const itemSummary = order.items.map((i) => `${i.label} ×${i.quantity}`).join(', ')
+  const itemSummary = order.items.map((i) => `${i.label} ×${i.quantity ?? i.qty ?? 0}`).join(', ')
 
   return (
     <Link
@@ -64,7 +65,7 @@ function OrderRow({ order }: { order: Order }) {
           <StatusBadge status={order.status} />
         </div>
         <p className="text-xs text-[#666666] mt-0.5 truncate">{itemSummary}</p>
-        <p className="text-xs text-[#1A1A1A] font-medium mt-0.5">${order.pricing.total.toFixed(2)}</p>
+        <p className="text-xs text-[#1A1A1A] font-medium mt-0.5">${(order.pricing?.total ?? order.total ?? 0).toFixed(2)}</p>
       </div>
       <ChevronRight size={16} className="text-[#999] shrink-0" />
     </Link>
@@ -82,7 +83,7 @@ export default function OrdersPage() {
     const fetchOrders = async () => {
       const { data } = await supabase
         .from('orders')
-        .select('id, status, address, scheduled_date, scheduled_hour, items, pricing, created_at')
+        .select('id, status, location, scheduled_date, scheduled_hour, items, pricing, total, created_at')
         .eq('customer_id', user.id)
         .order('created_at', { ascending: false })
 
