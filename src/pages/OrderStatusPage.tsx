@@ -224,6 +224,14 @@ export default function OrderStatusPage() {
         })}
       </section>
 
+      {/* Access / gate info */}
+      {order.private_notes && (
+        <section className="border border-amber-200 bg-amber-50 rounded-xl p-4">
+          <p className="text-sm font-semibold text-amber-700 mb-1">🔒 Access / gate info</p>
+          <p className="text-sm text-amber-900">{order.private_notes}</p>
+        </section>
+      )}
+
       {/* Photo */}
       {order.photo_url && !order.photo_url.startsWith('file://') && (
         <section className="border border-[#E0E0E0] rounded-xl overflow-hidden">

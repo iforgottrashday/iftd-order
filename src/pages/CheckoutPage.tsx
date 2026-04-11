@@ -326,7 +326,13 @@ export default function CheckoutPage() {
 
         {notes ? (
           <div className="pt-2 border-t border-[#E0E0E0]">
-            <p className="text-xs text-[#666666]">Notes: {notes}</p>
+            <p className="text-xs text-[#666666]"><span className="font-semibold">Note:</span> {notes}</p>
+          </div>
+        ) : null}
+        {privateNotes ? (
+          <div className={`pt-2 border-t border-[#E0E0E0]${notes ? '' : ' mt-0'}`}>
+            <p className="text-xs font-semibold text-amber-700">🔒 Access / gate info:</p>
+            <p className="text-xs text-amber-900 mt-0.5">{privateNotes}</p>
           </div>
         ) : null}
       </section>
