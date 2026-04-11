@@ -189,7 +189,9 @@ export default function OrderStatusPage() {
           Scheduled
         </div>
         <p className="text-[#1A1A1A] font-medium text-sm">
-          {formatDate(order.scheduled_date)} at {getHourLabel(order.scheduled_hour)}
+          {order.scheduled_date && order.scheduled_hour != null
+            ? `${formatDate(order.scheduled_date)} at ${getHourLabel(order.scheduled_hour)}`
+            : 'Scheduled'}
         </p>
       </section>
 

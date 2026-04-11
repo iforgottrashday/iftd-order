@@ -60,7 +60,9 @@ function OrderRow({ order }: { order: Order }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium text-[#1A1A1A]">
-            {formatDate(order.scheduled_date)} at {getHourLabel(order.scheduled_hour)}
+            {order.scheduled_date && order.scheduled_hour != null
+              ? `${formatDate(order.scheduled_date)} at ${getHourLabel(order.scheduled_hour)}`
+              : 'Scheduled'}
           </span>
           <StatusBadge status={order.status} />
         </div>
