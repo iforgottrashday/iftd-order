@@ -21,7 +21,9 @@ export default function OrderSubmittedPage() {
       {orderId && (
         <div className="bg-[#F5F5F5] rounded-xl px-4 py-3 w-full">
           <p className="text-xs text-[#666666] font-medium uppercase tracking-wider">Order Reference</p>
-          <p className="text-sm font-mono text-[#1A1A1A] mt-1 break-all">{orderId}</p>
+          <p className="text-xl font-bold font-mono text-[#1A1A1A] mt-1 tracking-widest">
+            #{orderId.slice(0, 8).toUpperCase()}
+          </p>
         </div>
       )}
 

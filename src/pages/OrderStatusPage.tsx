@@ -134,7 +134,9 @@ export default function OrderStatusPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold text-[#1A1A1A]">Order Status</h1>
-          <p className="text-xs text-[#666666] mt-0.5 font-mono break-all">{order.id.slice(0, 8)}...</p>
+          <p className="text-base font-bold font-mono text-[#666666] mt-0.5 tracking-widest">
+            #{order.id.slice(0, 8).toUpperCase()}
+          </p>
         </div>
         <StatusBadge status={order.status} />
       </div>
