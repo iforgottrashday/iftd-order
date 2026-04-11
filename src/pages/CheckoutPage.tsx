@@ -32,6 +32,103 @@ interface OrderState {
   }
 }
 
+// ── Load number generation ────────────────────────────────────────────────────
+const LOAD_NUMBER_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+function generateLoadNumber(): string {
+  let result = ''
+  for (let i = 0; i < 8; i++) {
+    result += LOAD_NUMBER_CHARS[Math.floor(Math.random() * LOAD_NUMBER_CHARS.length)]
+  }
+  return result
+}
+
+// ── Disposal stop generation ──────────────────────────────────────────────────
+// Mirrors the logic in mobile orderService.generateDisposalStops.
+// Groups ordered materials into the fewest facility stops (greedy, most
+// versatile sites first). One stop per facility, one shared load number.
+async function generateDisposalStops(
+  orderId: string,
+  county: string,
+  state: string,
+  items: OrderItem[],
+): Promise<void> {
+  const materialTypes = items.filter(i => i.quantity > 0).map(i => i.product_id)
+  if (materialTypes.length === 0) return
+
+  // Try county-specific sites first; fall back to all active sites
+  let sites: { id: string; accepted_materials: string[] }[] | null = null
+
+  if (county && state) {
+    const { data: serviceAreas } = await supabase
+      .from('disposal_site_service_areas')
+      .select('disposal_site_id')
+      .eq('county', county)
+      .eq('state', state)
+
+    if (serviceAreas?.length) {
+      const { data } = await supabase
+        .from('disposal_sites')
+        .select('id, accepted_materials')
+        .in('id', serviceAreas.map((sa: { disposal_site_id: string }) => sa.disposal_site_id))
+        .eq('is_active', true)
+      sites = data
+    }
+  }
+
+  if (!sites?.length) {
+    const { data } = await supabase
+      .from('disposal_sites')
+      .select('id, accepted_materials')
+      .eq('is_active', true)
+    sites = data
+  }
+
+  if (!sites?.length) return
+
+  // Sort most-versatile sites first
+  const sorted = [...sites].sort(
+    (a, b) => b.accepted_materials.length - a.accepted_materials.length,
+  )
+
+  // Greedy assignment: reuse already-selected sites before opening new ones
+  const siteToMaterials: Record<string, string[]> = {}
+  for (const material of materialTypes) {
+    let assigned = false
+    for (const siteId of Object.keys(siteToMaterials)) {
+      const site = sites!.find(s => s.id === siteId)
+      if (site?.accepted_materials.includes(material)) {
+        siteToMaterials[siteId].push(material)
+        assigned = true
+        break
+      }
+    }
+    if (!assigned) {
+      const best = sorted.find(
+        s => s.accepted_materials.includes(material) && !siteToMaterials[s.id],
+      )
+      if (best) siteToMaterials[best.id] = [material]
+    }
+  }
+
+  // One stop per facility
+  const stops = Object.entries(siteToMaterials).map(([siteId, mats]) => ({
+    order_id: orderId,
+    disposal_site_id: siteId,
+    materials: mats,
+    status: 'pending',
+    load_number: generateLoadNumber(),
+  }))
+
+  if (stops.length > 0) {
+    const { error: stopsError } = await supabase
+      .from('order_disposal_stops')
+      .insert(stops)
+    if (stopsError) {
+      console.warn('[CheckoutPage] disposal stops insert failed:', stopsError)
+    }
+  }
+}
+
 function getHourLabel(h: number): string {
   if (h === 12) return '12:00 PM'
   if (h > 12) return `${h - 12}:00 PM`
@@ -147,6 +244,14 @@ export default function CheckoutPage() {
         navigate('/orders', { replace: true })
         return
       }
+
+      // Step 3: generate disposal stops (required for hauler routing)
+      await generateDisposalStops(
+        newOrder.id,
+        location_county ?? '',
+        location_state ?? '',
+        items,
+      )
 
       console.log('[CheckoutPage] navigating to order-submitted:', newOrder.id)
       navigate(`/order-submitted/${newOrder.id}`, { replace: true })
@@ -269,7 +374,7 @@ export default function CheckoutPage() {
       </section>
 
       {/* Place Order sticky footer — sits above the bottom nav (z-40) */}
-      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-3 z-50">
+      <div className="fixed bottom-[52px] left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-3 z-50">
         {error && (
           <p className="text-[#EF4444] text-xs font-medium mb-2 text-center">{error}</p>
         )}

@@ -319,17 +319,15 @@ export default function RequestPickupPage() {
       .eq('id', user.id)
       .single()
       .then(({ data }) => {
-        if (!data) return
-        if (data.home_address) {
-          setHomeAddress(data.home_address)
-          setAddressData({
-            address: data.home_address,
-            lat: data.home_lat ?? null,
-            lng: data.home_lng ?? null,
-            county: data.county ?? '',
-            state: data.state ?? '',
-          })
-        }
+        if (!data?.home_address) return
+        setHomeAddress(data.home_address)
+        setAddressData({
+          address: data.home_address,
+          lat: data.home_lat ? Number(data.home_lat) : null,
+          lng: data.home_lng ? Number(data.home_lng) : null,
+          county: data.county ?? '',
+          state: data.state ?? '',
+        })
       })
   }, [user])
 
@@ -366,7 +364,7 @@ export default function RequestPickupPage() {
   const total    = trashSubtotal + recyclingSubtotal
   const hasItems = trashQty > 0 || recyclingQty > 0
 
-  const handleReview = () => {
+  const handleReview = async () => {
     if (!addressData || !addressData.address.trim()) {
       alert('Please enter and select a pickup address.')
       return
@@ -380,6 +378,35 @@ export default function RequestPickupPage() {
       return
     }
 
+    // Ensure we have coordinates — geocode now if still missing
+    let finalAddressData = addressData
+    if (!finalAddressData.lat || !finalAddressData.lng) {
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(finalAddressData.address)}&countrycodes=us`
+        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } })
+        const results: NominatimResult[] = await res.json()
+        if (results.length > 0) {
+          const r = results[0]
+          const countyRaw = r.address.county ?? ''
+          const countyClean = countyRaw.replace(/ County$| Parish$| Borough$/i, '')
+          finalAddressData = {
+            address: finalAddressData.address,
+            lat: parseFloat(r.lat),
+            lng: parseFloat(r.lon),
+            county: countyClean || finalAddressData.county,
+            state: r.address.state ?? finalAddressData.state,
+          }
+          setAddressData(finalAddressData)
+        } else {
+          alert('Could not confirm the location for this address. Please search and select it from the dropdown.')
+          return
+        }
+      } catch {
+        alert('Could not confirm the location for this address. Please search and select it from the dropdown.')
+        return
+      }
+    }
+
     const items = []
     if (trashQty > 0) {
       items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, unbagged_qty: unbaggedTrashQty })
@@ -390,11 +417,11 @@ export default function RequestPickupPage() {
 
     navigate('/checkout', {
       state: {
-        address: addressData.address,
-        latitude: addressData.lat,
-        longitude: addressData.lng,
-        location_county: addressData.county,
-        location_state: addressData.state,
+        address: finalAddressData.address,
+        latitude: finalAddressData.lat,
+        longitude: finalAddressData.lng,
+        location_county: finalAddressData.county,
+        location_state: finalAddressData.state,
         items,
         pickupType,
         scheduledDate: pickupType === 'now' ? null : scheduledDate,
@@ -632,7 +659,7 @@ export default function RequestPickupPage() {
       </section>
 
       {/* Sticky footer */}
-      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 flex items-center justify-between gap-4">
+      <div className="fixed bottom-[52px] left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 flex items-center justify-between gap-4 z-50">
         <div>
           <p className="text-xs text-[#666666]">Estimated Total</p>
           <p className="text-2xl font-bold text-[#1A73E8]">${total.toFixed(2)}</p>
