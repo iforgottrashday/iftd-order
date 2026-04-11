@@ -18,8 +18,9 @@ interface OrderState {
   location_county: string
   location_state: string
   items: OrderItem[]
-  scheduledDate: string
-  scheduledHour: number
+  pickupType: 'now' | 'later'
+  scheduledDate: string | null
+  scheduledHour: number | null
   notes: string
   privateNotes: string
   photoFile: File | null
@@ -70,7 +71,7 @@ export default function CheckoutPage() {
     )
   }
 
-  const { address, latitude, longitude, location_county, location_state, items, scheduledDate, scheduledHour, notes, privateNotes, pricing } = state
+  const { address, latitude, longitude, location_county, location_state, items, pickupType, scheduledDate, scheduledHour, notes, privateNotes, pricing } = state
 
   const handlePlaceOrder = async () => {
     if (!user) { setError('Not signed in.'); return }
@@ -88,9 +89,10 @@ export default function CheckoutPage() {
       const payload = {
         customer_id: user.id,
         status: 'pending',
+        pickup_time: pickupType,
         items: dbItems,
-        scheduled_date: scheduledDate,
-        scheduled_hour: scheduledHour,
+        scheduled_date: pickupType === 'now' ? null : scheduledDate,
+        scheduled_hour: pickupType === 'now' ? null : scheduledHour,
         location: address,
         latitude: latitude || null,
         longitude: longitude || null,
@@ -161,10 +163,14 @@ export default function CheckoutPage() {
       <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2">
         <div className="flex items-center gap-2 text-[#666666] text-sm font-medium">
           <Clock size={16} />
-          Schedule
+          Pickup Time
         </div>
         <p className="text-[#1A1A1A] font-medium">
-          {formatDate(scheduledDate)} at {getHourLabel(scheduledHour)}
+          {pickupType === 'now'
+            ? '⚡ Instant Pickup'
+            : scheduledDate && scheduledHour != null
+              ? `${formatDate(scheduledDate)} at ${getHourLabel(scheduledHour)}`
+              : 'Scheduled'}
         </p>
       </section>
 

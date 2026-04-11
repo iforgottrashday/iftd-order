@@ -11,6 +11,74 @@ const UNBAGGED_SURCHARGE = 5    // +$5 for unbagged trash option
 const SERVICE_START = 8
 const SERVICE_END = 17
 
+const INSTANT_START = 7   // 7am
+const INSTANT_END   = 14  // 2pm (cutoff — not available at or after)
+
+// ── Federal holiday helpers ──────────────────────────────────────────────────
+
+function nthWeekday(year: number, month: number, weekday: number, n: number): Date {
+  // Returns the nth occurrence (1-based) of weekday (0=Sun…6=Sat) in given month
+  const d = new Date(year, month, 1)
+  const diff = (weekday - d.getDay() + 7) % 7
+  d.setDate(1 + diff + (n - 1) * 7)
+  return d
+}
+
+function lastWeekday(year: number, month: number, weekday: number): Date {
+  const d = new Date(year, month + 1, 0) // last day of month
+  const diff = (d.getDay() - weekday + 7) % 7
+  d.setDate(d.getDate() - diff)
+  return d
+}
+
+function observedDate(year: number, month: number, day: number): Date {
+  const d = new Date(year, month, day)
+  if (d.getDay() === 0) return new Date(year, month, day + 1) // Sunday → Monday
+  if (d.getDay() === 6) return new Date(year, month, day - 1) // Saturday → Friday
+  return d
+}
+
+function getFederalHolidays(year: number): Set<string> {
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const holidays = [
+    observedDate(year, 0,  1),   // New Year's Day
+    nthWeekday(year, 0, 1, 3),   // MLK Jr. Day — 3rd Mon Jan
+    nthWeekday(year, 1, 1, 3),   // Presidents' Day — 3rd Mon Feb
+    lastWeekday(year, 4, 1),     // Memorial Day — last Mon May
+    observedDate(year, 5, 19),   // Juneteenth
+    observedDate(year, 6, 4),    // Independence Day
+    nthWeekday(year, 8, 1, 1),   // Labor Day — 1st Mon Sep
+    nthWeekday(year, 9, 1, 2),   // Columbus Day — 2nd Mon Oct
+    observedDate(year, 10, 11),  // Veterans Day
+    nthWeekday(year, 10, 4, 4),  // Thanksgiving — 4th Thu Nov
+    observedDate(year, 11, 25),  // Christmas
+  ]
+  return new Set(holidays.map(fmt))
+}
+
+function isFederalHoliday(date: Date): boolean {
+  const year = date.getFullYear()
+  const holidays = getFederalHolidays(year)
+  const key = `${year}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  return holidays.has(key)
+}
+
+function getInstantAvailability(): { available: boolean; reason?: string } {
+  const now = new Date()
+  const hour = now.getHours()
+  if (isFederalHoliday(now)) {
+    return { available: false, reason: 'Not available on federal holidays' }
+  }
+  if (hour < INSTANT_START) {
+    return { available: false, reason: `Available from ${INSTANT_START > 12 ? INSTANT_START - 12 : INSTANT_START}${INSTANT_START >= 12 ? 'pm' : 'am'} today` }
+  }
+  if (hour >= INSTANT_END) {
+    return { available: false, reason: 'Today\'s instant window has closed (available 7am–2pm)' }
+  }
+  return { available: true }
+}
+
 const PRODUCT_IMAGES: Record<string, string> = {
   trash: '/products/trash.png',
   recycling: '/products/recycling.png',
@@ -221,6 +289,11 @@ export default function RequestPickupPage() {
   const { user } = useAuth()
   const photoRef = useRef<HTMLInputElement>(null)
 
+  const instantStatus = getInstantAvailability()
+  const [pickupType, setPickupType] = useState<'now' | 'later'>(
+    instantStatus.available ? 'now' : 'later'
+  )
+
   const [addressData, setAddressData] = useState<AddressData | null>(null)
   const [homeAddress, setHomeAddress] = useState('')
   const [trashQty, setTrashQty] = useState(0)
@@ -316,8 +389,9 @@ export default function RequestPickupPage() {
         location_county: addressData.county,
         location_state: addressData.state,
         items,
-        scheduledDate,
-        scheduledHour,
+        pickupType,
+        scheduledDate: pickupType === 'now' ? null : scheduledDate,
+        scheduledHour: pickupType === 'now' ? null : scheduledHour,
         notes,
         privateNotes,
         photoFile,
@@ -336,11 +410,55 @@ export default function RequestPickupPage() {
         <h1 className="text-2xl font-bold text-[#1A1A1A]">Order Trash Pickup</h1>
       </div>
 
-      {/* Step 1: Schedule */}
+      {/* Step 1: Pickup time */}
       <section className="flex flex-col gap-3">
         <h2 className="text-base font-bold text-[#1A1A1A]">Step 1: Choose a pickup time</h2>
-        <div className="flex flex-col gap-3 border border-[#E0E0E0] rounded-xl p-4">
-          <div className="flex items-center justify-between">
+
+        {/* NOW / Schedule toggle */}
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            disabled={!instantStatus.available}
+            onClick={() => instantStatus.available && setPickupType('now')}
+            className={`flex flex-col items-center gap-1 py-4 rounded-xl border-2 font-semibold text-sm transition-colors ${
+              pickupType === 'now'
+                ? 'border-[#1A73E8] bg-[#EBF3FD] text-[#1A73E8]'
+                : instantStatus.available
+                ? 'border-[#E0E0E0] bg-white text-[#1A1A1A]'
+                : 'border-[#E0E0E0] bg-[#F5F5F5] text-[#BDBDBD]'
+            }`}
+          >
+            <span className="text-xl">⚡</span>
+            NOW
+            <span className="text-xs font-normal">
+              {instantStatus.available ? '7am – 2pm today' : 'Unavailable'}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPickupType('later')}
+            className={`flex flex-col items-center gap-1 py-4 rounded-xl border-2 font-semibold text-sm transition-colors ${
+              pickupType === 'later'
+                ? 'border-[#1A73E8] bg-[#EBF3FD] text-[#1A73E8]'
+                : 'border-[#E0E0E0] bg-white text-[#1A1A1A]'
+            }`}
+          >
+            <span className="text-xl">📅</span>
+            Schedule
+            <span className="text-xs font-normal">Pick a date &amp; time</span>
+          </button>
+        </div>
+
+        {/* Reason instant is unavailable */}
+        {!instantStatus.available && (
+          <p className="text-xs text-[#F59E0B] bg-[#FFFBEB] border border-[#FDE68A] rounded-lg px-3 py-2">
+            ⏰ {instantStatus.reason}
+          </p>
+        )}
+
+        {/* Date + time picker — only when Schedule selected */}
+        {pickupType === 'later' && (
+          <div className="flex flex-col gap-3 border border-[#E0E0E0] rounded-xl p-4">
             <div className="flex items-center gap-2">
               <span className="text-lg">📅</span>
               <input
@@ -351,37 +469,37 @@ export default function RequestPickupPage() {
                 className="text-base font-semibold text-[#1A1A1A] border-none bg-transparent focus:outline-none"
               />
             </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <p className="text-sm text-[#666666] flex items-center gap-1">
-              <span>🕐</span> Select an arrival window
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {Array.from({ length: SERVICE_END - SERVICE_START }, (_, i) => {
-                const h = SERVICE_START + i
-                const disabled = isToday && h <= currentHour
-                const selected = scheduledHour === h
-                return (
-                  <button
-                    key={h}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => setScheduledHour(h)}
-                    className={`px-3 py-2 rounded-full border text-sm font-medium transition-colors ${
-                      selected
-                        ? 'bg-[#1A73E8] text-white border-[#1A73E8]'
-                        : disabled
-                        ? 'bg-[#F5F5F5] text-[#BDBDBD] border-[#E0E0E0]'
-                        : 'bg-white text-[#1A1A1A] border-[#E0E0E0]'
-                    }`}
-                  >
-                    {getHourLabel(h).replace(':00', '')}
-                  </button>
-                )
-              })}
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-[#666666] flex items-center gap-1">
+                <span>🕐</span> Select an arrival window
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: SERVICE_END - SERVICE_START }, (_, i) => {
+                  const h = SERVICE_START + i
+                  const disabled = isToday && h <= currentHour
+                  const selected = scheduledHour === h
+                  return (
+                    <button
+                      key={h}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => setScheduledHour(h)}
+                      className={`px-3 py-2 rounded-full border text-sm font-medium transition-colors ${
+                        selected
+                          ? 'bg-[#1A73E8] text-white border-[#1A73E8]'
+                          : disabled
+                          ? 'bg-[#F5F5F5] text-[#BDBDBD] border-[#E0E0E0]'
+                          : 'bg-white text-[#1A1A1A] border-[#E0E0E0]'
+                      }`}
+                    >
+                      {getHourLabel(h).replace(':00', '')}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </section>
 
       {/* Step 2: Items */}
