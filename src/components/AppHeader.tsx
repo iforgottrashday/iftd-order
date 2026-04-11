@@ -77,7 +77,7 @@ export default function AppHeader() {
                 to="/sign-up"
                 className="bg-[#1A73E8] text-white text-sm font-medium px-3 py-1.5 rounded-lg"
               >
-                Hauler Portal
+                Sign Up
               </Link>
             </div>
           )}
