@@ -176,6 +176,10 @@ export default function CheckoutPage() {
     setLoading(true)
 
     try {
+      // Step 1: Mock payment authorization (always approves — replace with Stripe when ready)
+      const transactionId = `MOCK-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+      const paymentResult = { authorized: true, transactionId }
+
       const dbItems = items.map((item) => ({
         product_id: item.product_id,
         label: item.label,
@@ -215,6 +219,7 @@ export default function CheckoutPage() {
         photo_url: photoUrl,
         pricing: pricing,
         total: pricing.total,
+        payment_result: paymentResult,
       }
       console.log('[CheckoutPage] inserting order payload:', payload)
 
@@ -369,7 +374,7 @@ export default function CheckoutPage() {
         <div>
           <p className="text-sm font-medium text-[#1A1A1A]">Payment</p>
           <p className="text-xs text-[#666666] mt-0.5">
-            Payment will be collected by your hauler at time of pickup. No charges are made online at this time.
+            Your payment is authorized when you place your order. You will not be charged until your pickup is completed.
           </p>
         </div>
       </section>
