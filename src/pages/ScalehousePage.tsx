@@ -126,6 +126,8 @@ export default function ScalehousePage() {
     if (!stop) return
     setSubmitting(true)
     try {
+      // Update ALL stops sharing this load number — all orders comingled at this
+      // facility are one physical load and should be confirmed together.
       const { error } = await supabase
         .from('order_disposal_stops')
         .update({
@@ -134,7 +136,7 @@ export default function ScalehousePage() {
           gross_weight_lbs: grossWeight ? parseFloat(grossWeight) : null,
           yardage: yardage ? parseFloat(yardage) : null,
         })
-        .eq('id', stop.id)
+        .eq('load_number', stop.load_number)
 
       if (error) throw error
       setSuccessWeight(grossWeight || null)
@@ -155,7 +157,7 @@ export default function ScalehousePage() {
       const { error } = await supabase
         .from('order_disposal_stops')
         .update({ rejection_reason: reason })
-        .eq('id', stop.id)
+        .eq('load_number', stop.load_number)
 
       if (error) throw error
       setStep('rejected')
