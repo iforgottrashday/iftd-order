@@ -4,21 +4,26 @@
  * SQL migration required in Supabase before this page is functional:
  *
  * ALTER TABLE public.order_disposal_stops
- *   ADD COLUMN IF NOT EXISTS gross_weight_lbs numeric,
- *   ADD COLUMN IF NOT EXISTS yardage          numeric,
- *   ADD COLUMN IF NOT EXISTS rejection_reason text;
+ *   ADD COLUMN IF NOT EXISTS gross_weight_lbs  numeric,
+ *   ADD COLUMN IF NOT EXISTS tare_weight_lbs   numeric,
+ *   ADD COLUMN IF NOT EXISTS yardage           numeric,
+ *   ADD COLUMN IF NOT EXISTS disposal_price    numeric,
+ *   ADD COLUMN IF NOT EXISTS rejection_reason  text,
+ *   ADD COLUMN IF NOT EXISTS checked_out_at    timestamptz;
  *
- * -- RLS policies for scalehouse portal (anon access via load_number token)
+ * -- RLS policies
  * CREATE POLICY "scalehouse_select" ON public.order_disposal_stops
  *   FOR SELECT TO anon, authenticated USING (true);
  * CREATE POLICY "scalehouse_update" ON public.order_disposal_stops
  *   FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
+ * CREATE POLICY "authenticated_insert_stops" ON public.order_disposal_stops
+ *   FOR INSERT TO authenticated WITH CHECK (true);
  */
 
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-type Step = 'enter' | 'review' | 'reject_modal' | 'success' | 'rejected'
+type Step = 'enter' | 'checkin_form' | 'checkout_form' | 'reject_modal' | 'checkin_success' | 'checkout_success' | 'rejected'
 
 interface DisposalSiteRow {
   id: string
@@ -39,15 +44,19 @@ interface StopRow {
   materials: string[]
   status: string
   load_number: string | null
+  gross_weight_lbs: number | null
+  tare_weight_lbs: number | null
+  yardage: number | null
+  disposal_price: number | null
   disposal_site: DisposalSiteRow | null
   pickup: OrderRow | null
 }
 
 const REJECT_REASONS = [
-  'Code not found or expired',
   'Wrong material type',
   'Facility at capacity',
   'Safety concern',
+  'Code not found or expired',
   'Other',
 ]
 
@@ -57,64 +66,62 @@ function formatItems(items: OrderRow['items']): string {
     .map(item => {
       const label = item.label ?? item.product_id ?? item.id ?? 'Item'
       const qty = item.quantity ?? item.qty ?? 1
-      return `${qty}x ${label}`
+      return `${qty}× ${label}`
     })
     .join(', ')
 }
 
 export default function ScalehousePage() {
-  const [step, setStep] = useState<Step>('enter')
-  const [loadNumber, setLoadNumber] = useState('')
-  const [stop, setStop] = useState<StopRow | null>(null)
-  const [grossWeight, setGrossWeight] = useState('')
-  const [yardage, setYardage] = useState('')
-  const [rejectReason, setRejectReason] = useState(REJECT_REASONS[0])
-  const [rejectNotes, setRejectNotes] = useState('')
+  const [step, setStep]               = useState<Step>('enter')
+  const [loadNumber, setLoadNumber]   = useState('')
+  const [stop, setStop]               = useState<StopRow | null>(null)
   const [lookupError, setLookupError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [successWeight, setSuccessWeight] = useState<string | null>(null)
-  const [successYardage, setSuccessYardage] = useState<string | null>(null)
+  const [submitting, setSubmitting]   = useState(false)
+
+  // Check-in fields
+  const [grossWeight, setGrossWeight] = useState('')
+  const [yardage, setYardage]         = useState('')
+  const [price, setPrice]             = useState('')
+
+  // Check-out fields
+  const [tareWeight, setTareWeight] = useState('')
+
+  // Reject fields
+  const [rejectReason, setRejectReason] = useState(REJECT_REASONS[0])
+  const [rejectNotes, setRejectNotes]   = useState('')
 
   const reset = () => {
     setStep('enter')
     setLoadNumber('')
     setStop(null)
-    setGrossWeight('')
-    setYardage('')
-    setRejectReason(REJECT_REASONS[0])
-    setRejectNotes('')
     setLookupError(null)
     setSubmitting(false)
-    setSuccessWeight(null)
-    setSuccessYardage(null)
+    setGrossWeight('')
+    setYardage('')
+    setPrice('')
+    setTareWeight('')
+    setRejectReason(REJECT_REASONS[0])
+    setRejectNotes('')
   }
 
+  // ── Lookup ──────────────────────────────────────────────────────────────
   const handleLookup = async () => {
     setLookupError(null)
-    if (!loadNumber.trim()) {
-      setLookupError('Please enter a load number.')
-      return
-    }
+    if (!loadNumber.trim()) { setLookupError('Please enter a load number.'); return }
     setSubmitting(true)
     try {
       const { data, error } = await supabase
         .from('order_disposal_stops')
-        .select(`
-          *,
-          disposal_site:disposal_sites(id, name, address),
-          pickup:orders(id, location, items)
-        `)
+        .select('*, disposal_site:disposal_sites(id, name, address), pickup:orders(id, location, items)')
         .eq('load_number', loadNumber.trim().toUpperCase())
         .in('status', ['pending', 'checked_in'])
         .maybeSingle()
 
       if (error) throw error
-      if (!data) {
-        setLookupError('Load number not found or already processed.')
-        return
-      }
+      if (!data) { setLookupError('Load number not found or already processed.'); return }
+
       setStop(data as unknown as StopRow)
-      setStep('review')
+      setStep(data.status === 'checked_in' ? 'checkout_form' : 'checkin_form')
     } catch (err: unknown) {
       setLookupError(err instanceof Error ? err.message : 'An error occurred. Please try again.')
     } finally {
@@ -122,26 +129,25 @@ export default function ScalehousePage() {
     }
   }
 
+  // ── Check-In ─────────────────────────────────────────────────────────────
   const handleCheckIn = async () => {
     if (!stop) return
+    if (!grossWeight) { alert('Please enter gross weight before checking in.'); return }
     setSubmitting(true)
     try {
-      // Update ALL stops sharing this load number — all orders comingled at this
-      // facility are one physical load and should be confirmed together.
       const { error } = await supabase
         .from('order_disposal_stops')
         .update({
-          status: 'checked_in',
-          confirmed_at: new Date().toISOString(),
-          gross_weight_lbs: grossWeight ? parseFloat(grossWeight) : null,
-          yardage: yardage ? parseFloat(yardage) : null,
+          status:           'checked_in',
+          confirmed_at:     new Date().toISOString(),
+          gross_weight_lbs: parseFloat(grossWeight),
+          yardage:          yardage ? parseFloat(yardage) : null,
+          disposal_price:   price   ? parseFloat(price)   : null,
         })
         .eq('load_number', stop.load_number)
 
       if (error) throw error
-      setSuccessWeight(grossWeight || null)
-      setSuccessYardage(yardage || null)
-      setStep('success')
+      setStep('checkin_success')
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Check-in failed. Please try again.')
     } finally {
@@ -149,6 +155,31 @@ export default function ScalehousePage() {
     }
   }
 
+  // ── Check-Out ─────────────────────────────────────────────────────────────
+  const handleCheckOut = async () => {
+    if (!stop) return
+    if (!tareWeight) { alert('Please enter tare weight before checking out.'); return }
+    setSubmitting(true)
+    try {
+      const { error } = await supabase
+        .from('order_disposal_stops')
+        .update({
+          status:          'completed',
+          tare_weight_lbs: parseFloat(tareWeight),
+          checked_out_at:  new Date().toISOString(),
+        })
+        .eq('load_number', stop.load_number)
+
+      if (error) throw error
+      setStep('checkout_success')
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Check-out failed. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // ── Reject ────────────────────────────────────────────────────────────────
   const handleReject = async () => {
     if (!stop) return
     setSubmitting(true)
@@ -168,10 +199,40 @@ export default function ScalehousePage() {
     }
   }
 
+  // ── Net weight helper ─────────────────────────────────────────────────────
+  const grossLbs = stop?.gross_weight_lbs ?? (grossWeight ? parseFloat(grossWeight) : null)
+  const tareLbs  = tareWeight ? parseFloat(tareWeight) : null
+  const netLbs   = grossLbs && tareLbs ? grossLbs - tareLbs : null
+
+  // ── Shared load details card ──────────────────────────────────────────────
+  const LoadCard = () => (
+    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6 text-left">
+      <p className="text-xs font-mono text-gray-400 tracking-widest mb-2">#{stop?.load_number}</p>
+      <p className="text-sm font-bold text-gray-800 mb-0.5">
+        {stop?.disposal_site?.name ?? 'Unknown Facility'}
+      </p>
+      {stop?.disposal_site?.address && (
+        <p className="text-xs text-gray-500 mb-2">{stop.disposal_site.address}</p>
+      )}
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {stop?.materials.map(m => (
+          <span key={m} className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded-full capitalize">
+            {m.replace(/_/g, ' ')}
+          </span>
+        ))}
+      </div>
+      {stop?.pickup?.items && (
+        <p className="text-xs text-gray-600">{formatItems(stop.pickup.items)}</p>
+      )}
+      {stop?.pickup?.location && (
+        <p className="text-xs text-gray-400 mt-1">📍 {stop.pickup.location}</p>
+      )}
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
-      {/* Header */}
-      <header className="bg-navy-900 bg-[#0f1f3d] text-white px-6 py-4 shadow-md">
+      <header className="bg-[#0f1f3d] text-white px-6 py-4 shadow-md">
         <div className="max-w-2xl mx-auto">
           <span className="text-lg font-bold tracking-tight">iForgotTrashDay</span>
           <span className="mx-2 text-gray-400">—</span>
@@ -180,11 +241,12 @@ export default function ScalehousePage() {
       </header>
 
       <main className="flex-1 flex items-center justify-center px-4 py-10">
-        {/* ── Step: Enter ─────────────────────────────────────────── */}
+
+        {/* ── Enter load number ─────────────────────────────────────────── */}
         {step === 'enter' && (
           <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">iForgotTrashDay</h1>
-            <p className="text-gray-500 mb-8 text-sm">Scalehouse Check-In Portal</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Scalehouse Check-In</h1>
+            <p className="text-gray-500 mb-8 text-sm">Enter the hauler's load number to begin</p>
 
             <label className="block text-left text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
               Load Number
@@ -217,77 +279,35 @@ export default function ScalehousePage() {
           </div>
         )}
 
-        {/* ── Step: Review ─────────────────────────────────────────── */}
-        {(step === 'review' || step === 'reject_modal') && stop && (
+        {/* ── Check-In form ─────────────────────────────────────────────── */}
+        {(step === 'checkin_form' || step === 'reject_modal') && stop && (
           <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
-            <h2 className="text-xl font-bold text-gray-900 mb-1">Load Details</h2>
-            <p className="text-xs text-gray-400 font-mono mb-6 tracking-widest">
-              #{stop.load_number}
-            </p>
-
-            {/* Facility */}
-            <div className="mb-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Facility</p>
-              <p className="text-base font-semibold text-gray-800">
-                {stop.disposal_site?.name ?? 'Unknown Facility'}
-              </p>
-              {stop.disposal_site?.address && (
-                <p className="text-sm text-gray-500">{stop.disposal_site.address}</p>
-              )}
+            <div className="flex items-center gap-2 mb-1">
+              <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
+                Check-In
+              </span>
             </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-5">Incoming Load</h2>
 
-            {/* Materials */}
-            <div className="mb-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Materials</p>
-              <div className="flex flex-wrap gap-2">
-                {stop.materials.map(m => (
-                  <span
-                    key={m}
-                    className="bg-blue-100 text-blue-800 text-xs font-semibold px-3 py-1 rounded-full capitalize"
-                  >
-                    {m.replace(/_/g, ' ')}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <LoadCard />
 
-            {/* Pickup address */}
-            {stop.pickup?.location && (
-              <div className="mb-4">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Pickup Address</p>
-                <p className="text-sm text-gray-700">{stop.pickup.location}</p>
-              </div>
-            )}
-
-            {/* Items */}
-            {stop.pickup?.items && (
-              <div className="mb-6">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Items</p>
-                <p className="text-sm text-gray-700">{formatItems(stop.pickup.items)}</p>
-              </div>
-            )}
-
-            <hr className="border-gray-100 mb-6" />
-
-            {/* Weight input */}
             <div className="mb-4">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">
-                Gross Weight (lbs)
+                Gross Weight (lbs) <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
                 value={grossWeight}
                 onChange={e => setGrossWeight(e.target.value)}
-                placeholder="Enter weight"
+                placeholder="Total weight of vehicle + load"
                 className="w-full border border-gray-300 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-blue-500"
                 min="0"
               />
             </div>
 
-            {/* Yardage input */}
-            <div className="mb-6">
+            <div className="mb-4">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">
-                Yardage (cubic yards, optional)
+                Yardage (cubic yards)
               </label>
               <input
                 type="number"
@@ -300,40 +320,102 @@ export default function ScalehousePage() {
               />
             </div>
 
-            {/* Check In button */}
+            <div className="mb-6">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">
+                Price ($)
+              </label>
+              <input
+                type="number"
+                value={price}
+                onChange={e => setPrice(e.target.value)}
+                placeholder="Optional — disposal fee charged"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-blue-500"
+                min="0"
+                step="0.01"
+              />
+            </div>
+
             <button
               onClick={handleCheckIn}
-              disabled={submitting}
+              disabled={submitting || !grossWeight}
               className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl text-lg mb-3 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? 'Processing…' : '✓ Check In'}
             </button>
 
-            {/* Reject button */}
             <button
               onClick={() => setStep('reject_modal')}
               disabled={submitting}
-              className="w-full border-2 border-red-400 text-red-600 hover:bg-red-50 font-semibold py-3 rounded-xl text-base transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full border-2 border-red-400 text-red-600 hover:bg-red-50 font-semibold py-3 rounded-xl text-base transition disabled:opacity-50"
             >
               Cannot Process This Load
             </button>
           </div>
         )}
 
-        {/* ── Step: Reject Modal (overlay on review) ───────────────── */}
+        {/* ── Check-Out form ────────────────────────────────────────────── */}
+        {step === 'checkout_form' && stop && (
+          <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
+                Check-Out
+              </span>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-5">Outgoing Load</h2>
+
+            <LoadCard />
+
+            {/* Gross weight reminder */}
+            {stop.gross_weight_lbs && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-4 flex justify-between text-sm">
+                <span className="text-gray-500">Gross weight recorded</span>
+                <span className="font-bold text-gray-800">{stop.gross_weight_lbs.toLocaleString()} lbs</span>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">
+                Tare Weight (lbs) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                value={tareWeight}
+                onChange={e => setTareWeight(e.target.value)}
+                placeholder="Empty vehicle weight"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-blue-500"
+                min="0"
+                autoFocus
+              />
+            </div>
+
+            {/* Net weight preview */}
+            {netLbs !== null && netLbs > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-6 flex justify-between text-sm">
+                <span className="text-blue-600 font-semibold">Net weight (load only)</span>
+                <span className="font-bold text-blue-800">{netLbs.toLocaleString()} lbs</span>
+              </div>
+            )}
+
+            <button
+              onClick={handleCheckOut}
+              disabled={submitting || !tareWeight}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl text-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? 'Processing…' : '✓ Check Out'}
+            </button>
+          </div>
+        )}
+
+        {/* ── Reject Modal ──────────────────────────────────────────────── */}
         {step === 'reject_modal' && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
             <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
               <h3 className="text-lg font-bold text-gray-900 mb-5">
                 Why can't this load be processed?
               </h3>
-
               <div className="space-y-2 mb-4">
                 {REJECT_REASONS.map(reason => (
-                  <label
-                    key={reason}
-                    className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-gray-50"
-                  >
+                  <label key={reason} className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-gray-50">
                     <input
                       type="radio"
                       name="rejectReason"
@@ -346,7 +428,6 @@ export default function ScalehousePage() {
                   </label>
                 ))}
               </div>
-
               <div className="mb-6">
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">
                   Additional notes (optional)
@@ -359,10 +440,9 @@ export default function ScalehousePage() {
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-red-400 resize-none"
                 />
               </div>
-
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep('review')}
+                  onClick={() => setStep('checkin_form')}
                   disabled={submitting}
                   className="flex-1 border border-gray-300 text-gray-700 font-semibold py-3 rounded-xl hover:bg-gray-50 transition disabled:opacity-50"
                 >
@@ -380,26 +460,31 @@ export default function ScalehousePage() {
           </div>
         )}
 
-        {/* ── Step: Success ────────────────────────────────────────── */}
-        {step === 'success' && (
+        {/* ── Check-In Success ─────────────────────────────────────────── */}
+        {step === 'checkin_success' && (
           <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md text-center">
             <div className="text-6xl mb-4">✅</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Load Checked In!</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Load Checked In</h2>
+            <p className="text-gray-500 text-sm mb-6">Hauler has been notified. Return when vehicle is empty for check-out.</p>
 
-            {successWeight && (
-              <p className="text-gray-600 text-sm mb-1">
-                Gross weight: <strong>{parseFloat(successWeight).toLocaleString()} lbs</strong>
-              </p>
-            )}
-            {successYardage && (
-              <p className="text-gray-600 text-sm mb-1">
-                Yardage: <strong>{parseFloat(successYardage)} yd³</strong>
-              </p>
-            )}
-
-            <p className="text-gray-500 text-sm mt-4 mb-8">
-              The hauler has been notified. Thank you.
-            </p>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-left mb-6 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Gross weight</span>
+                <span className="font-bold text-gray-800">{parseFloat(grossWeight).toLocaleString()} lbs</span>
+              </div>
+              {yardage && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Yardage</span>
+                  <span className="font-bold text-gray-800">{parseFloat(yardage)} yd³</span>
+                </div>
+              )}
+              {price && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Disposal price</span>
+                  <span className="font-bold text-gray-800">${parseFloat(price).toFixed(2)}</span>
+                </div>
+              )}
+            </div>
 
             <button
               onClick={reset}
@@ -410,23 +495,70 @@ export default function ScalehousePage() {
           </div>
         )}
 
-        {/* ── Step: Rejected ───────────────────────────────────────── */}
+        {/* ── Check-Out Success ────────────────────────────────────────── */}
+        {step === 'checkout_success' && (
+          <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md text-center">
+            <div className="text-6xl mb-4">🏁</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Load Checked Out</h2>
+            <p className="text-gray-500 text-sm mb-6">Transaction complete.</p>
+
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-left mb-6 space-y-2">
+              {stop?.gross_weight_lbs && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Gross weight</span>
+                  <span className="font-bold text-gray-800">{stop.gross_weight_lbs.toLocaleString()} lbs</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Tare weight</span>
+                <span className="font-bold text-gray-800">{parseFloat(tareWeight).toLocaleString()} lbs</span>
+              </div>
+              {stop?.gross_weight_lbs && (
+                <div className="flex justify-between text-sm border-t border-gray-200 pt-2 mt-2">
+                  <span className="text-gray-700 font-semibold">Net weight</span>
+                  <span className="font-bold text-gray-900">
+                    {(stop.gross_weight_lbs - parseFloat(tareWeight)).toLocaleString()} lbs
+                  </span>
+                </div>
+              )}
+              {stop?.yardage && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Yardage</span>
+                  <span className="font-bold text-gray-800">{stop.yardage} yd³</span>
+                </div>
+              )}
+              {stop?.disposal_price && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Disposal price</span>
+                  <span className="font-bold text-gray-800">${stop.disposal_price.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={reset}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl text-lg transition"
+            >
+              Process Another Load
+            </button>
+          </div>
+        )}
+
+        {/* ── Rejected ─────────────────────────────────────────────────── */}
         {step === 'rejected' && (
           <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md text-center">
             <div className="text-6xl mb-4">❌</div>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Load Flagged</h2>
-            <p className="text-gray-500 text-sm mb-8">
-              The hauler has been notified.
-            </p>
-
+            <p className="text-gray-500 text-sm mb-8">The hauler has been notified.</p>
             <button
               onClick={reset}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl text-lg transition"
             >
-              Check In Another Load
+              Process Another Load
             </button>
           </div>
         )}
+
       </main>
     </div>
   )
