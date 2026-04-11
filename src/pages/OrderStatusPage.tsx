@@ -14,6 +14,7 @@ interface Order {
   items: Array<{ product_id?: string; id?: string; label: string; quantity?: number; qty?: number; bags?: number }>
   pricing: { subtotal: number; disposalFee: number; serviceFee: number; total: number } | null
   total: number | null
+  photo_url: string | null
   private_notes: string | null
   created_at: string
 }
@@ -25,7 +26,10 @@ function getHourLabel(h: number): string {
 }
 
 function formatDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number)
+  // Handle both YYYY-MM-DD and full ISO timestamps (stored by mobile app)
+  const datePart = (dateStr ?? '').split('T')[0]
+  const [year, month, day] = datePart.split('-').map(Number)
+  if (!year || !month || !day || isNaN(year) || isNaN(month) || isNaN(day)) return 'Scheduled'
   const d = new Date(year, month - 1, day)
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
@@ -67,7 +71,7 @@ export default function OrderStatusPage() {
     const fetchOrder = async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select('id, status, location, scheduled_date, scheduled_hour, items, pricing, total, private_notes, created_at')
+        .select('id, status, location, scheduled_date, scheduled_hour, items, pricing, total, photo_url, private_notes, created_at')
         .eq('id', orderId)
         .single()
 
@@ -217,6 +221,17 @@ export default function OrderStatusPage() {
           )
         })}
       </section>
+
+      {/* Photo */}
+      {order.photo_url && !order.photo_url.startsWith('file://') && (
+        <section className="border border-[#E0E0E0] rounded-xl overflow-hidden">
+          <img
+            src={order.photo_url}
+            alt="Pickup area"
+            className="w-full object-cover max-h-64"
+          />
+        </section>
+      )}
 
       {/* Pricing */}
       <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-2">

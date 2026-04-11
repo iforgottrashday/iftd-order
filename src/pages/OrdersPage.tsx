@@ -25,7 +25,9 @@ function getHourLabel(h: number): string {
 }
 
 function formatDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number)
+  const datePart = (dateStr ?? '').split('T')[0]
+  const [year, month, day] = datePart.split('-').map(Number)
+  if (!year || !month || !day || isNaN(year) || isNaN(month) || isNaN(day)) return 'Scheduled'
   const d = new Date(year, month - 1, day)
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }

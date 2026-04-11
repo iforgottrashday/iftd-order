@@ -86,6 +86,21 @@ export default function CheckoutPage() {
         unbagged_qty: item.unbagged_qty ?? 0,
       }))
 
+      // Upload photo to Supabase Storage if provided
+      let photoUrl: string | null = null
+      const photoFile = state.photoFile
+      if (photoFile) {
+        const ext = photoFile.name.split('.').pop() ?? 'jpg'
+        const path = `orders/${user.id}/${Date.now()}.${ext}`
+        const { error: uploadError } = await supabase.storage
+          .from('order-photos')
+          .upload(path, photoFile, { upsert: true })
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('order-photos').getPublicUrl(path)
+          photoUrl = urlData.publicUrl
+        }
+      }
+
       const payload = {
         customer_id: user.id,
         status: 'pending',
@@ -100,6 +115,7 @@ export default function CheckoutPage() {
         location_state: location_state || null,
         notes: notes || null,
         private_notes: privateNotes || null,
+        photo_url: photoUrl,
         pricing: pricing,
       }
       console.log('[CheckoutPage] inserting order payload:', payload)
