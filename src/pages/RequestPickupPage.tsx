@@ -9,10 +9,10 @@ const ITEM_PRICE         = 20   // $20 per item (all types)
 const UNBAGGED_SURCHARGE = 5    // +$5 for unbagged trash option
 
 const SERVICE_START = 7   // 7am
-const SERVICE_END   = 14  // 2pm
+const SERVICE_END   = 15  // generates slots up to and including 2pm
 
 const INSTANT_START = SERVICE_START
-const INSTANT_END   = SERVICE_END
+const INSTANT_END   = 14  // instant unavailable at or after 2pm
 
 // ── Federal holiday helpers ──────────────────────────────────────────────────
 
