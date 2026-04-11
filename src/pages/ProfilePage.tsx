@@ -9,8 +9,10 @@ interface Profile {
   phone: string
   home_address: string
   city: string
+  county: string
   state: string
   zip: string
+  wants_deals: boolean
   points_balance: number
   referral_code: string
 }
@@ -23,8 +25,10 @@ export default function ProfilePage() {
     phone: '',
     home_address: '',
     city: '',
+    county: '',
     state: '',
     zip: '',
+    wants_deals: true,
     points_balance: 0,
     referral_code: '',
   })
@@ -38,7 +42,7 @@ export default function ProfilePage() {
     if (!user) return
     supabase
       .from('profiles')
-      .select('first_name, last_name, phone, home_address, city, state, zip, points_balance, referral_code')
+      .select('first_name, last_name, phone, home_address, city, county, state, zip, wants_deals, points_balance, referral_code')
       .eq('id', user.id)
       .single()
       .then(({ data }) => {
@@ -49,8 +53,10 @@ export default function ProfilePage() {
             phone: data.phone ?? '',
             home_address: data.home_address ?? '',
             city: data.city ?? '',
+            county: data.county ?? '',
             state: data.state ?? '',
             zip: data.zip ?? '',
+            wants_deals: data.wants_deals ?? true,
             points_balance: data.points_balance ?? 0,
             referral_code: data.referral_code ?? '',
           })
@@ -61,6 +67,9 @@ export default function ProfilePage() {
 
   const update = (field: keyof Profile) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }))
+
+  const toggle = (field: keyof Profile) => () =>
+    setForm((prev) => ({ ...prev, [field]: !prev[field] }))
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault()
@@ -77,8 +86,10 @@ export default function ProfilePage() {
         phone: form.phone || null,
         home_address: form.home_address || null,
         city: form.city || null,
+        county: form.county || null,
         state: form.state || null,
         zip: form.zip || null,
+        wants_deals: form.wants_deals,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id)
@@ -235,6 +246,19 @@ export default function ProfilePage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
+                <label htmlFor="county" className="text-sm font-medium text-[#1A1A1A]">County</label>
+                <input
+                  id="county"
+                  type="text"
+                  value={form.county}
+                  onChange={update('county')}
+                  placeholder="Hamilton"
+                  className="w-full border border-[#E0E0E0] rounded-lg px-3 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
                 <label htmlFor="state" className="text-sm font-medium text-[#1A1A1A]">State</label>
                 <input
                   id="state"
@@ -246,20 +270,50 @@ export default function ProfilePage() {
                   className="w-full border border-[#E0E0E0] rounded-lg px-3 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white uppercase"
                 />
               </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="zip" className="text-sm font-medium text-[#1A1A1A]">ZIP</label>
-              <input
-                id="zip"
-                type="text"
-                value={form.zip}
-                onChange={update('zip')}
-                placeholder="45202"
-                maxLength={10}
-                className="w-full border border-[#E0E0E0] rounded-lg px-4 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white"
-              />
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="zip" className="text-sm font-medium text-[#1A1A1A]">ZIP</label>
+                <input
+                  id="zip"
+                  type="text"
+                  value={form.zip}
+                  onChange={update('zip')}
+                  placeholder="45202"
+                  maxLength={10}
+                  className="w-full border border-[#E0E0E0] rounded-lg px-3 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white"
+                />
+              </div>
             </div>
           </div>
+        </div>
+
+        {/* Preferences */}
+        <div>
+          <p className="text-xs font-semibold text-[#666666] uppercase tracking-wider mb-2">Preferences</p>
+          <button
+            type="button"
+            onClick={toggle('wants_deals')}
+            className={`w-full flex items-center justify-between px-4 py-4 rounded-xl border-2 transition-colors ${
+              form.wants_deals
+                ? 'border-[#1A73E8] bg-[#EBF3FD]'
+                : 'border-[#E0E0E0] bg-white'
+            }`}
+          >
+            <div className="text-left">
+              <p className={`text-sm font-semibold ${form.wants_deals ? 'text-[#1A73E8]' : 'text-[#1A1A1A]'}`}>
+                SMS &amp; Deal Notifications
+              </p>
+              <p className="text-xs text-[#666666] mt-0.5">
+                Receive order updates and special offers via text
+              </p>
+            </div>
+            <div className={`w-11 h-6 rounded-full transition-colors flex items-center px-0.5 shrink-0 ml-4 ${
+              form.wants_deals ? 'bg-[#1A73E8]' : 'bg-[#D1D5DB]'
+            }`}>
+              <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                form.wants_deals ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </div>
+          </button>
         </div>
 
         <button
