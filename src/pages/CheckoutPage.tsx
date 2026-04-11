@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { MapPin, Clock, Package, CreditCard, Camera } from 'lucide-react'
+import { MapPin, Clock, Package, CreditCard, Camera, Zap } from 'lucide-react'
 
 interface OrderItem {
   product_id: string
@@ -167,7 +167,7 @@ export default function CheckoutPage() {
         </div>
         <p className="text-[#1A1A1A] font-medium">
           {pickupType === 'now'
-            ? '⚡ Instant Pickup'
+            ? <span className="flex items-center gap-1.5"><Zap size={15} className="text-[#1A73E8]" /> Instant Pickup</span>
             : scheduledDate && scheduledHour != null
               ? `${formatDate(scheduledDate)} at ${getHourLabel(scheduledHour)}`
               : 'Scheduled'}

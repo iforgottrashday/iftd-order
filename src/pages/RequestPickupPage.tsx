@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { Minus, Plus, Camera, MapPin, Search } from 'lucide-react'
+import { Minus, Plus, Camera, MapPin, Search, Zap, CalendarDays, Clock, Lock, AlertCircle } from 'lucide-react'
 
 // Pricing constants
 const ITEM_PRICE         = 20   // $20 per item (all types)
@@ -428,7 +428,7 @@ export default function RequestPickupPage() {
                 : 'border-[#E0E0E0] bg-[#F5F5F5] text-[#BDBDBD]'
             }`}
           >
-            <span className="text-xl">⚡</span>
+            <Zap size={22} />
             NOW
             <span className="text-xs font-normal">
               {instantStatus.available ? '7am – 2pm today' : 'Unavailable'}
@@ -443,7 +443,7 @@ export default function RequestPickupPage() {
                 : 'border-[#E0E0E0] bg-white text-[#1A1A1A]'
             }`}
           >
-            <span className="text-xl">📅</span>
+            <CalendarDays size={22} />
             Schedule
             <span className="text-xs font-normal">Pick a date &amp; time</span>
           </button>
@@ -452,7 +452,7 @@ export default function RequestPickupPage() {
         {/* Reason instant is unavailable */}
         {!instantStatus.available && (
           <p className="text-xs text-[#F59E0B] bg-[#FFFBEB] border border-[#FDE68A] rounded-lg px-3 py-2">
-            ⏰ {instantStatus.reason}
+            <AlertCircle size={14} className="inline mr-1 shrink-0" />{instantStatus.reason}
           </p>
         )}
 
@@ -460,7 +460,7 @@ export default function RequestPickupPage() {
         {pickupType === 'later' && (
           <div className="flex flex-col gap-3 border border-[#E0E0E0] rounded-xl p-4">
             <div className="flex items-center gap-2">
-              <span className="text-lg">📅</span>
+              <CalendarDays size={18} className="text-[#666666] shrink-0" />
               <input
                 type="date"
                 value={scheduledDate}
@@ -470,8 +470,8 @@ export default function RequestPickupPage() {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <p className="text-sm text-[#666666] flex items-center gap-1">
-                <span>🕐</span> Select an arrival window
+              <p className="text-sm text-[#666666] flex items-center gap-1.5">
+                <Clock size={14} /> Select an arrival window
               </p>
               <div className="flex flex-wrap gap-2">
                 {Array.from({ length: SERVICE_END - SERVICE_START }, (_, i) => {
@@ -601,8 +601,8 @@ export default function RequestPickupPage() {
           className="w-full border border-[#E0E0E0] rounded-xl px-4 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white resize-none"
         />
         <div className="flex flex-col gap-1.5">
-          <p className="text-sm font-semibold text-[#1A1A1A] flex items-center gap-1">
-            🔒 Gate code / access info <span className="font-normal text-[#666666]">(optional)</span>
+          <p className="text-sm font-semibold text-[#1A1A1A] flex items-center gap-1.5">
+            <Lock size={14} /> Gate code / access info <span className="font-normal text-[#666666]">(optional)</span>
           </p>
           <p className="text-xs text-[#666666]">Only visible to your hauler after they accept</p>
           <textarea
