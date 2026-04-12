@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Save, Copy, Check } from 'lucide-react'
+import { Save, Copy, Check, ChevronRight } from 'lucide-react'
 
 interface Profile {
   first_name: string
@@ -135,21 +136,26 @@ export default function ProfilePage() {
 
       {/* Rewards banner */}
       {(form.points_balance > 0 || form.referral_code) && (
-        <div className="bg-[#EBF3FD] border-b border-[#E0E0E0] px-4 py-4 flex items-center justify-between">
-          <div>
-            <p className="text-[#1A73E8] text-2xl font-bold">{form.points_balance} pts</p>
-            <p className="text-[#666666] text-xs mt-0.5">Earn 25 pts per referral · 100 pts = 1 free item</p>
+        <Link to="/rewards" className="block">
+          <div className="bg-[#EBF3FD] border-b border-[#E0E0E0] px-4 py-4 flex items-center justify-between">
+            <div>
+              <p className="text-[#1A73E8] text-2xl font-bold">{form.points_balance} pts</p>
+              <p className="text-[#666666] text-xs mt-0.5">Earn 25 pts per referral · 100 pts = 1 free item</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {form.referral_code && (
+                <button
+                  onClick={(e) => { e.preventDefault(); copyReferralCode() }}
+                  className="flex items-center gap-1.5 bg-white border border-[#1A73E8] text-[#1A73E8] text-sm font-semibold px-3 py-2 rounded-xl"
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {form.referral_code}
+                </button>
+              )}
+              <ChevronRight size={18} className="text-[#1A73E8] shrink-0" />
+            </div>
           </div>
-          {form.referral_code && (
-            <button
-              onClick={copyReferralCode}
-              className="flex items-center gap-1.5 bg-white border border-[#1A73E8] text-[#1A73E8] text-sm font-semibold px-3 py-2 rounded-xl"
-            >
-              {copied ? <Check size={14} /> : <Copy size={14} />}
-              {form.referral_code}
-            </button>
-          )}
-        </div>
+        </Link>
       )}
 
       <form onSubmit={handleSave} className="px-4 py-6 flex flex-col gap-4">

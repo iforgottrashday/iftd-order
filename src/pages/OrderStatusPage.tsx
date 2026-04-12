@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { MapPin, Clock, Package, ArrowLeft, CheckCircle, Circle } from 'lucide-react'
+import { MapPin, Clock, Package, ArrowLeft, CheckCircle, Circle, MessageCircle } from 'lucide-react'
 
 type OrderStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled'
 
@@ -11,6 +11,7 @@ interface Order {
   location: string
   scheduled_date: string | null
   scheduled_hour: number | null
+  hauler_id: string | null
   items: Array<{ product_id?: string; id?: string; label: string; quantity?: number; qty?: number; bags?: number; unbagged_qty?: number }>
   pricing: { subtotal: number; disposalFee: number; serviceFee: number; total: number } | null
   total: number | null
@@ -64,6 +65,7 @@ function StatusBadge({ status }: { status: OrderStatus }) {
 
 export default function OrderStatusPage() {
   const { orderId } = useParams<{ orderId: string }>()
+  const navigate = useNavigate()
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -74,7 +76,7 @@ export default function OrderStatusPage() {
     const fetchOrder = async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select('id, status, location, scheduled_date, scheduled_hour, items, pricing, total, photo_url, private_notes, created_at')
+        .select('id, status, location, scheduled_date, scheduled_hour, hauler_id, items, pricing, total, photo_url, private_notes, created_at')
         .eq('id', orderId)
         .single()
 
@@ -180,6 +182,17 @@ export default function OrderStatusPage() {
             )
           })}
         </section>
+      )}
+
+      {/* Chat with Hauler */}
+      {(order.status === 'accepted' || order.status === 'in_progress') && order.hauler_id && (
+        <button
+          onClick={() => navigate(`/chat/${order.id}`)}
+          className="flex items-center justify-center gap-2 w-full border border-[#1A73E8] text-[#1A73E8] font-semibold py-3 rounded-xl text-sm hover:bg-[#EBF3FD] transition-colors"
+        >
+          <MessageCircle size={18} />
+          Chat with Hauler
+        </button>
       )}
 
       {/* Address */}

@@ -11,6 +11,9 @@ import OrderStatusPage from './pages/OrderStatusPage'
 import OrdersPage from './pages/OrdersPage'
 import ProfilePage from './pages/ProfilePage'
 import ScalehousePage from './pages/ScalehousePage'
+import RewardsPage from './pages/RewardsPage'
+import NotificationsPage from './pages/NotificationsPage'
+import ChatPage from './pages/ChatPage'
 
 export default function App() {
   return (
@@ -59,6 +62,30 @@ export default function App() {
                   element={
                     <ProtectedRoute>
                       <ProfilePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/rewards"
+                  element={
+                    <ProtectedRoute>
+                      <RewardsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/notifications"
+                  element={
+                    <ProtectedRoute>
+                      <NotificationsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/chat/:orderId"
+                  element={
+                    <ProtectedRoute>
+                      <ChatPage />
                     </ProtectedRoute>
                   }
                 />
