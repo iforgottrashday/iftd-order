@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { MapPin, Clock, Package, CreditCard, Camera, Zap, ArrowLeft } from 'lucide-react'
+import { MapPin, Clock, Package, CreditCard, Camera, Zap, ArrowLeft, Star, Minus, Plus } from 'lucide-react'
+
+const POINTS_PER_FREE_ITEM = 100
+const POINTS_PER_ITEM_EARNED = 5
 
 interface OrderItem {
   product_id: string
@@ -153,6 +156,19 @@ export default function CheckoutPage() {
     if (!state?.photoFile) return null
     try { return URL.createObjectURL(state.photoFile) } catch { return null }
   })
+  const [pointsBalance, setPointsBalance] = useState(0)
+  const [freeItemsToRedeem, setFreeItemsToRedeem] = useState(0)
+
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('points_balance')
+      .single()
+      .then(({ data, error }) => {
+        console.log('[CheckoutPage] profile fetch:', data, error)
+        if (data?.points_balance != null) setPointsBalance(data.points_balance)
+      })
+  }, [])
 
   if (!state) {
     return (
@@ -169,6 +185,13 @@ export default function CheckoutPage() {
   }
 
   const { address, latitude, longitude, location_county, location_state, items, pickupType, scheduledDate, scheduledHour, notes, privateNotes, pricing } = state
+
+  const totalItems = items.reduce((sum, i) => sum + i.quantity, 0)
+  const freeItemsAvailable = Math.floor(pointsBalance / POINTS_PER_FREE_ITEM)
+  const maxRedeemable = Math.min(freeItemsAvailable, totalItems)
+  const discountAmount = freeItemsToRedeem * 20   // each free item saves $20 (base price per bin)
+  const discountedTotal = Math.max(0, pricing.total - discountAmount)
+  const pointsEarned = totalItems * POINTS_PER_ITEM_EARNED
 
   const handlePlaceOrder = async () => {
     if (!user) { setError('Not signed in.'); return }
@@ -218,7 +241,8 @@ export default function CheckoutPage() {
         private_notes: privateNotes || '',
         photo_url: photoUrl,
         pricing: pricing,
-        total: pricing.total,
+        total: discountedTotal,
+        points_redeemed: freeItemsToRedeem > 0 ? freeItemsToRedeem * POINTS_PER_FREE_ITEM : null,
         payment_result: paymentResult,
       }
       console.log('[CheckoutPage] inserting order payload:', payload)
@@ -363,12 +387,68 @@ export default function CheckoutPage() {
         </section>
       )}
 
+      {/* Rewards redemption */}
+      {pointsBalance >= POINTS_PER_FREE_ITEM && (
+        <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-3">
+          <div className="flex items-center gap-2 text-[#666666] text-sm font-medium">
+            <Star size={16} className="text-amber-500" />
+            Apply Savings
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[#1A1A1A] text-sm font-semibold">Redeem Points</p>
+              <p className="text-[#666666] text-xs mt-0.5">
+                {pointsBalance} pts · {freeItemsAvailable} free item{freeItemsAvailable !== 1 ? 's' : ''} available
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setFreeItemsToRedeem(v => Math.max(0, v - 1))}
+                disabled={freeItemsToRedeem === 0}
+                className="w-8 h-8 rounded-full border border-[#E0E0E0] flex items-center justify-center disabled:opacity-30"
+              >
+                <Minus size={14} />
+              </button>
+              <span className="text-[#1A1A1A] font-bold text-base w-4 text-center">{freeItemsToRedeem}</span>
+              <button
+                onClick={() => setFreeItemsToRedeem(v => Math.min(maxRedeemable, v + 1))}
+                disabled={freeItemsToRedeem >= maxRedeemable}
+                className="w-8 h-8 rounded-full border border-[#E0E0E0] flex items-center justify-center disabled:opacity-30"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </div>
+          {freeItemsToRedeem > 0 && (
+            <p className="text-xs text-green-700 font-medium bg-green-50 rounded-lg px-3 py-2">
+              🎉 {freeItemsToRedeem * POINTS_PER_FREE_ITEM} points will be redeemed — saving ${discountAmount.toFixed(2)}
+            </p>
+          )}
+        </section>
+      )}
+
       {/* Total */}
-      <section className="border border-[#E0E0E0] rounded-xl p-4">
+      <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-1.5">
+        {freeItemsToRedeem > 0 && (
+          <>
+            <div className="flex justify-between text-[#666666] text-sm">
+              <span>Subtotal</span>
+              <span>${pricing.total.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-green-700 text-sm font-medium">
+              <span>Points discount ({freeItemsToRedeem} free item{freeItemsToRedeem !== 1 ? 's' : ''})</span>
+              <span>−${discountAmount.toFixed(2)}</span>
+            </div>
+            <div className="border-t border-[#E0E0E0] my-0.5" />
+          </>
+        )}
         <div className="flex justify-between font-bold text-[#1A1A1A] text-base">
           <span>Total</span>
-          <span>${pricing.total.toFixed(2)}</span>
+          <span>${discountedTotal.toFixed(2)}</span>
         </div>
+        <p className="text-xs text-[#888888] mt-1">
+          You'll earn <span className="font-semibold text-[#1A73E8]">{pointsEarned} point{pointsEarned !== 1 ? 's' : ''}</span> when this order is completed.
+        </p>
       </section>
 
       {/* Payment note */}
@@ -392,7 +472,7 @@ export default function CheckoutPage() {
           disabled={loading}
           className="w-full bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-60"
         >
-          {loading ? 'Placing order...' : `Place Order — $${pricing.total.toFixed(2)}`}
+          {loading ? 'Placing order...' : `Place Order — $${discountedTotal.toFixed(2)}`}
         </button>
       </div>
     </div>
