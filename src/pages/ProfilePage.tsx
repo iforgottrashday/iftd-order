@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Save, Copy, Check, ChevronRight } from 'lucide-react'
+import { Save, Copy, Check, ChevronRight, Lock, Eye, EyeOff } from 'lucide-react'
 
 interface Profile {
   first_name: string
@@ -14,6 +14,7 @@ interface Profile {
   state: string
   zip: string
   wants_deals: boolean
+  wants_sms: boolean
   points_balance: number
   referral_code: string
 }
@@ -30,20 +31,31 @@ export default function ProfilePage() {
     state: '',
     zip: '',
     wants_deals: true,
+    wants_sms: true,
     points_balance: 0,
     referral_code: '',
   })
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [loading, setLoading]   = useState(true)
+  const [saving, setSaving]     = useState(false)
+  const [success, setSuccess]   = useState(false)
+  const [error, setError]       = useState('')
+  const [copied, setCopied]     = useState(false)
+
+  // Change password state
+  const [showPwForm, setShowPwForm]   = useState(false)
+  const [newPw, setNewPw]             = useState('')
+  const [confirmPw, setConfirmPw]     = useState('')
+  const [showNewPw, setShowNewPw]     = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
+  const [pwSaving, setPwSaving]       = useState(false)
+  const [pwError, setPwError]         = useState('')
+  const [pwSuccess, setPwSuccess]     = useState(false)
 
   useEffect(() => {
     if (!user) return
     supabase
       .from('profiles')
-      .select('first_name, last_name, phone, home_address, city, county, state, zip, wants_deals, points_balance, referral_code')
+      .select('first_name, last_name, phone, home_address, city, county, state, zip, wants_deals, wants_sms, points_balance, referral_code')
       .eq('id', user.id)
       .single()
       .then(({ data }) => {
@@ -58,6 +70,7 @@ export default function ProfilePage() {
             state: data.state ?? '',
             zip: data.zip ?? '',
             wants_deals: data.wants_deals ?? true,
+            wants_sms: data.wants_sms ?? true,
             points_balance: data.points_balance ?? 0,
             referral_code: data.referral_code ?? '',
           })
@@ -91,6 +104,7 @@ export default function ProfilePage() {
         state: form.state || null,
         zip: form.zip || null,
         wants_deals: form.wants_deals,
+        wants_sms: form.wants_sms,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id)
@@ -110,6 +124,24 @@ export default function ProfilePage() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
+  }
+
+  const handlePasswordChange = async () => {
+    setPwError('')
+    if (newPw.length < 8) { setPwError('Password must be at least 8 characters.'); return }
+    if (newPw !== confirmPw) { setPwError('Passwords do not match.'); return }
+    setPwSaving(true)
+    const { error } = await supabase.auth.updateUser({ password: newPw })
+    if (error) {
+      setPwError(error.message)
+    } else {
+      setPwSuccess(true)
+      setNewPw('')
+      setConfirmPw('')
+      setShowPwForm(false)
+      setTimeout(() => setPwSuccess(false), 4000)
+    }
+    setPwSaving(false)
   }
 
   const initials = [form.first_name[0], form.last_name[0]].filter(Boolean).join('').toUpperCase() || '?'
@@ -295,31 +327,48 @@ export default function ProfilePage() {
         {/* Preferences */}
         <div>
           <p className="text-xs font-semibold text-[#666666] uppercase tracking-wider mb-2">Preferences</p>
-          <button
-            type="button"
-            onClick={toggle('wants_deals')}
-            className={`w-full flex items-center justify-between px-4 py-4 rounded-xl border-2 transition-colors ${
-              form.wants_deals
-                ? 'border-[#1A73E8] bg-[#EBF3FD]'
-                : 'border-[#E0E0E0] bg-white'
-            }`}
-          >
-            <div className="text-left">
-              <p className={`text-sm font-semibold ${form.wants_deals ? 'text-[#1A73E8]' : 'text-[#1A1A1A]'}`}>
-                SMS &amp; Deal Notifications
-              </p>
-              <p className="text-xs text-[#666666] mt-0.5">
-                Receive order updates and special offers via text
-              </p>
-            </div>
-            <div className={`w-11 h-6 rounded-full transition-colors flex items-center px-0.5 shrink-0 ml-4 ${
-              form.wants_deals ? 'bg-[#1A73E8]' : 'bg-[#D1D5DB]'
-            }`}>
-              <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                form.wants_deals ? 'translate-x-5' : 'translate-x-0'
-              }`} />
-            </div>
-          </button>
+          <div className="flex flex-col divide-y divide-[#F0F0F0] border border-[#E0E0E0] rounded-xl overflow-hidden bg-white">
+            {/* Email toggle */}
+            <button
+              type="button"
+              onClick={toggle('wants_deals')}
+              className="flex items-center justify-between px-4 py-4 text-left"
+            >
+              <div className="flex-1 pr-4">
+                <p className="text-sm font-semibold text-[#1A1A1A]">Email deals &amp; alerts</p>
+                <p className="text-xs text-[#666666] mt-0.5 leading-relaxed">
+                  Receive promotions and service updates from I Forgot Trash Day, LLC.
+                </p>
+              </div>
+              <div className={`w-11 h-6 rounded-full transition-colors flex items-center px-0.5 shrink-0 ${
+                form.wants_deals ? 'bg-[#1A73E8]' : 'bg-[#D1D5DB]'
+              }`}>
+                <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                  form.wants_deals ? 'translate-x-5' : 'translate-x-0'
+                }`} />
+              </div>
+            </button>
+            {/* SMS toggle */}
+            <button
+              type="button"
+              onClick={toggle('wants_sms')}
+              className="flex items-center justify-between px-4 py-4 text-left"
+            >
+              <div className="flex-1 pr-4">
+                <p className="text-sm font-semibold text-[#1A1A1A]">Text message (SMS) alerts</p>
+                <p className="text-xs text-[#666666] mt-0.5 leading-relaxed">
+                  Marketing texts from I Forgot Trash Day, LLC. Msg &amp; data rates may apply. Reply STOP to unsubscribe.
+                </p>
+              </div>
+              <div className={`w-11 h-6 rounded-full transition-colors flex items-center px-0.5 shrink-0 ${
+                form.wants_sms ? 'bg-[#1A73E8]' : 'bg-[#D1D5DB]'
+              }`}>
+                <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                  form.wants_sms ? 'translate-x-5' : 'translate-x-0'
+                }`} />
+              </div>
+            </button>
+          </div>
         </div>
 
         <button
@@ -331,6 +380,104 @@ export default function ProfilePage() {
           {saving ? 'Saving...' : 'Save Profile'}
         </button>
       </form>
+
+      {/* Security section — outside the profile form */}
+      <div className="px-4 pb-10">
+        <p className="text-xs font-semibold text-[#666666] uppercase tracking-wider mb-2">Security</p>
+        <div className="border border-[#E0E0E0] rounded-xl overflow-hidden bg-white">
+          {!showPwForm ? (
+            <div className="flex items-center justify-between px-4 py-4">
+              <div className="flex items-center gap-3">
+                <Lock size={16} className="text-[#666666]" />
+                <p className="text-sm font-medium text-[#1A1A1A]">Password</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowPwForm(true); setPwError(''); setPwSuccess(false) }}
+                className="bg-[#1A73E8] text-white text-sm font-semibold px-4 py-2 rounded-lg"
+              >
+                Change Password
+              </button>
+            </div>
+          ) : (
+            <div className="px-4 py-4 flex flex-col gap-3">
+              <p className="text-sm font-semibold text-[#1A1A1A]">Change Password</p>
+
+              {pwError && (
+                <div className="bg-red-50 border border-[#EF4444] text-[#EF4444] text-xs px-3 py-2 rounded-lg">
+                  {pwError}
+                </div>
+              )}
+
+              {/* New password */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-[#666666]">New password</label>
+                <div className="relative">
+                  <input
+                    type={showNewPw ? 'text' : 'password'}
+                    value={newPw}
+                    onChange={e => setNewPw(e.target.value)}
+                    placeholder="At least 8 characters"
+                    className="w-full border border-[#E0E0E0] rounded-lg px-3 py-3 pr-10 text-sm text-[#1A1A1A] focus:outline-none focus:border-[#1A73E8] bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPw(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#999]"
+                  >
+                    {showNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm password */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-[#666666]">Confirm new password</label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPw ? 'text' : 'password'}
+                    value={confirmPw}
+                    onChange={e => setConfirmPw(e.target.value)}
+                    placeholder="Re-enter new password"
+                    className="w-full border border-[#E0E0E0] rounded-lg px-3 py-3 pr-10 text-sm text-[#1A1A1A] focus:outline-none focus:border-[#1A73E8] bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPw(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#999]"
+                  >
+                    {showConfirmPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => { setShowPwForm(false); setNewPw(''); setConfirmPw(''); setPwError('') }}
+                  className="flex-1 border border-[#E0E0E0] text-[#666666] text-sm font-semibold py-3 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePasswordChange}
+                  disabled={pwSaving || !newPw || !confirmPw}
+                  className="flex-1 bg-[#1A73E8] text-white text-sm font-semibold py-3 rounded-lg disabled:opacity-50"
+                >
+                  {pwSaving ? 'Saving…' : 'Update Password'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {pwSuccess && (
+          <div className="mt-3 bg-green-50 border border-[#22C55E] text-[#22C55E] text-sm px-4 py-3 rounded-lg">
+            Password updated successfully.
+          </div>
+        )}
+      </div>
     </div>
   )
 }
