@@ -69,10 +69,16 @@ export default function ChatPage() {
   useEffect(() => {
     if (!orderId) return
 
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      setCurrentUserId(user.id)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      setCurrentUserId(session.user.id)
+
+      // Inject the JWT into the realtime connection — required in Supabase JS v2.x+
+      // for postgres_changes to fire on RLS-protected tables
+      supabase.realtime.setAuth(session.access_token)
 
       // Load order
       const { data: orderData } = await supabase
@@ -100,33 +106,33 @@ export default function ChatPage() {
         .eq('order_id', orderId)
         .eq('sender_role', 'hauler')
         .is('read_at', null)
+
+      // Set up real-time subscription after JWT is injected
+      channel = supabase
+        .channel(`chat-${orderId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'chat_messages',
+            filter: `order_id=eq.${orderId}`,
+          },
+          (payload) => {
+            const newMsg = payload.new as ChatMessage
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev
+              return [...prev, newMsg]
+            })
+          }
+        )
+        .subscribe()
     }
 
     init()
 
-    // Real-time subscription
-    const channel = supabase
-      .channel(`chat-${orderId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `order_id=eq.${orderId}`,
-        },
-        (payload) => {
-          const newMsg = payload.new as ChatMessage
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev
-            return [...prev, newMsg]
-          })
-        }
-      )
-      .subscribe()
-
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) supabase.removeChannel(channel)
     }
   }, [orderId])
 
