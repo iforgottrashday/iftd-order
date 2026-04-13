@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { MapPin, Clock, Package, CreditCard, Camera, Zap, ArrowLeft, Star, Minus, Plus } from 'lucide-react'
+import { loadStripe } from '@stripe/stripe-js'
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
+import { MapPin, Clock, Package, CreditCard, Camera, Zap, ArrowLeft, Star, Minus, Plus, X, Lock } from 'lucide-react'
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string)
 
 const POINTS_PER_FREE_ITEM = 100
 const POINTS_PER_ITEM_EARNED = 5
@@ -46,9 +50,6 @@ function generateLoadNumber(): string {
 }
 
 // ── Disposal stop generation ──────────────────────────────────────────────────
-// Mirrors the logic in mobile orderService.generateDisposalStops.
-// Groups ordered materials into the fewest facility stops (greedy, most
-// versatile sites first). One stop per facility, one shared load number.
 async function generateDisposalStops(
   orderId: string,
   county: string,
@@ -58,7 +59,6 @@ async function generateDisposalStops(
   const materialTypes = items.filter(i => i.quantity > 0).map(i => i.product_id)
   if (materialTypes.length === 0) return
 
-  // Try county-specific sites first; fall back to all active sites
   let sites: { id: string; accepted_materials: string[] }[] | null = null
 
   if (county && state) {
@@ -88,12 +88,10 @@ async function generateDisposalStops(
 
   if (!sites?.length) return
 
-  // Sort most-versatile sites first
   const sorted = [...sites].sort(
     (a, b) => b.accepted_materials.length - a.accepted_materials.length,
   )
 
-  // Greedy assignment: reuse already-selected sites before opening new ones
   const siteToMaterials: Record<string, string[]> = {}
   for (const material of materialTypes) {
     let assigned = false
@@ -113,7 +111,6 @@ async function generateDisposalStops(
     }
   }
 
-  // One stop per facility
   const stops = Object.entries(siteToMaterials).map(([siteId, mats]) => ({
     order_id: orderId,
     disposal_site_id: siteId,
@@ -144,6 +141,110 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 }
 
+// ── Payment sheet inner form (must be inside <Elements>) ──────────────────────
+interface PaymentSheetFormProps {
+  amount: number
+  onSuccess: (paymentIntentId: string) => Promise<void>
+  onClose: () => void
+}
+
+function PaymentSheetForm({ amount, onSuccess, onClose }: PaymentSheetFormProps) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [paying, setPaying] = useState(false)
+  const [error, setError] = useState('')
+
+  const handlePay = async () => {
+    if (!stripe || !elements) return
+    setError('')
+    setPaying(true)
+
+    const { error: submitError } = await elements.submit()
+    if (submitError) {
+      setError(submitError.message ?? 'Card error.')
+      setPaying(false)
+      return
+    }
+
+    const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      redirect: 'if_required',
+      confirmParams: {
+        return_url: `${window.location.origin}/orders`,
+      },
+    })
+
+    if (confirmError) {
+      setError(confirmError.message ?? 'Payment failed. Please try again.')
+      setPaying(false)
+      return
+    }
+
+    if (paymentIntent?.status === 'succeeded' || paymentIntent?.status === 'requires_capture') {
+      await onSuccess(paymentIntent.id)
+    } else {
+      setError('Payment could not be confirmed. Please try again.')
+      setPaying(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-[#1A1A1A]">Payment</h2>
+          <p className="text-sm text-[#666666] mt-0.5">Charged when pickup is complete</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-8 h-8 rounded-full bg-[#F5F5F5] flex items-center justify-center"
+        >
+          <X size={16} className="text-[#666666]" />
+        </button>
+      </div>
+
+      {/* Amount */}
+      <div className="bg-[#F5F5F5] rounded-xl px-4 py-3 flex items-center justify-between">
+        <span className="text-sm text-[#666666] font-medium">Order total</span>
+        <span className="text-lg font-bold text-[#1A1A1A]">${amount.toFixed(2)}</span>
+      </div>
+
+      {/* Stripe Payment Element */}
+      <PaymentElement />
+
+      {error && (
+        <p className="text-[#EF4444] text-sm font-medium text-center">{error}</p>
+      )}
+
+      {/* Pay button */}
+      <button
+        onClick={handlePay}
+        disabled={paying || !stripe || !elements}
+        className="w-full bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-60 flex items-center justify-center gap-2"
+      >
+        {paying ? (
+          <>
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            Processing…
+          </>
+        ) : (
+          <>
+            <Lock size={15} />
+            Pay ${amount.toFixed(2)}
+          </>
+        )}
+      </button>
+
+      <div className="flex items-center justify-center gap-1.5 text-xs text-[#999999]">
+        <Lock size={11} />
+        Secured by Stripe
+      </div>
+    </div>
+  )
+}
+
+// ── Main checkout page ────────────────────────────────────────────────────────
 export default function CheckoutPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -159,13 +260,16 @@ export default function CheckoutPage() {
   const [pointsBalance, setPointsBalance] = useState(0)
   const [freeItemsToRedeem, setFreeItemsToRedeem] = useState(0)
 
+  // Payment sheet state
+  const [showPaymentSheet, setShowPaymentSheet] = useState(false)
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
+
   useEffect(() => {
     supabase
       .from('profiles')
       .select('points_balance')
       .single()
-      .then(({ data, error }) => {
-        console.log('[CheckoutPage] profile fetch:', data, error)
+      .then(({ data }) => {
         if (data?.points_balance != null) setPointsBalance(data.points_balance)
       })
   }, [])
@@ -189,28 +293,21 @@ export default function CheckoutPage() {
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0)
   const freeItemsAvailable = Math.floor(pointsBalance / POINTS_PER_FREE_ITEM)
   const maxRedeemable = Math.min(freeItemsAvailable, totalItems)
-  const discountAmount = freeItemsToRedeem * 20   // each free item saves $20 (base price per bin)
+  const discountAmount = freeItemsToRedeem * 20
   const discountedTotal = Math.max(0, pricing.total - discountAmount)
   const pointsEarned = totalItems * POINTS_PER_ITEM_EARNED
 
-  const handlePlaceOrder = async () => {
-    if (!user) { setError('Not signed in.'); return }
-    setError('')
-    setLoading(true)
-
+  // ── Insert order after payment succeeds ────────────────────────────────────
+  const insertOrder = async (paymentIntentId: string) => {
+    if (!user) return
     try {
-      // Step 1: Mock payment authorization (always approves — replace with Stripe when ready)
-      const transactionId = `MOCK-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
-      const paymentResult = { authorized: true, transactionId }
-
-      const dbItems = items.map((item) => ({
+      const dbItems = items.map(item => ({
         product_id: item.product_id,
         label: item.label,
         quantity: item.quantity,
         unbagged_qty: item.unbagged_qty ?? 0,
       }))
 
-      // Upload photo to Supabase Storage if provided
       let photoUrl: string | null = null
       const photoFile = state.photoFile
       if (photoFile) {
@@ -240,26 +337,15 @@ export default function CheckoutPage() {
         notes: notes || '',
         private_notes: privateNotes || '',
         photo_url: photoUrl,
-        pricing: pricing,
+        pricing,
         total: discountedTotal,
         points_redeemed: freeItemsToRedeem > 0 ? freeItemsToRedeem * POINTS_PER_FREE_ITEM : null,
-        payment_result: paymentResult,
-      }
-      console.log('[CheckoutPage] inserting order payload:', payload)
-
-      // Step 1: insert the order
-      const { error: insertError } = await supabase
-        .from('orders')
-        .insert(payload)
-
-      if (insertError) {
-        console.error('[CheckoutPage] insert error:', insertError)
-        throw new Error(insertError.message)
+        payment_result: { authorized: true, transactionId: paymentIntentId },
       }
 
-      console.log('[CheckoutPage] insert succeeded, fetching order id...')
+      const { error: insertError } = await supabase.from('orders').insert(payload)
+      if (insertError) throw new Error(insertError.message)
 
-      // Step 2: fetch the order we just created (avoids RLS read-back issues)
       const { data: newOrder, error: fetchError } = await supabase
         .from('orders')
         .select('id')
@@ -270,24 +356,38 @@ export default function CheckoutPage() {
         .single()
 
       if (fetchError || !newOrder) {
-        console.warn('[CheckoutPage] fetch-back failed, going to /orders:', fetchError)
         navigate('/orders', { replace: true })
         return
       }
 
-      // Step 3: generate disposal stops (required for hauler routing)
-      await generateDisposalStops(
-        newOrder.id,
-        location_county ?? '',
-        location_state ?? '',
-        items,
-      )
-
-      console.log('[CheckoutPage] navigating to order-submitted:', newOrder.id)
+      await generateDisposalStops(newOrder.id, location_county ?? '', location_state ?? '', items)
       navigate(`/order-submitted/${newOrder.id}`, { replace: true })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to place order. Please try again.'
-      console.error('[CheckoutPage] caught error:', err)
+      setError(msg)
+      setShowPaymentSheet(false)
+    }
+  }
+
+  // ── Open payment sheet: create PaymentIntent first ─────────────────────────
+  const handlePlaceOrder = async () => {
+    if (!user) { setError('Not signed in.'); return }
+    setError('')
+    setLoading(true)
+
+    try {
+      const res = await fetch('/api/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: discountedTotal }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.clientSecret) throw new Error(data.error ?? 'Could not initialize payment.')
+
+      setClientSecret(data.clientSecret)
+      setShowPaymentSheet(true)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not initialize payment.'
       setError(msg)
     } finally {
       setLoading(false)
@@ -462,7 +562,7 @@ export default function CheckoutPage() {
         </div>
       </section>
 
-      {/* Place Order sticky footer — sits above the bottom nav (z-40) */}
+      {/* Place Order sticky footer */}
       <div className="fixed bottom-[52px] left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-3 z-50">
         {error && (
           <p className="text-[#EF4444] text-xs font-medium mb-2 text-center">{error}</p>
@@ -470,11 +570,50 @@ export default function CheckoutPage() {
         <button
           onClick={handlePlaceOrder}
           disabled={loading}
-          className="w-full bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-60"
+          className="w-full bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-60 flex items-center justify-center gap-2"
         >
-          {loading ? 'Placing order...' : `Place Order — $${discountedTotal.toFixed(2)}`}
+          {loading
+            ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Setting up payment…</>
+            : `Place Order — $${discountedTotal.toFixed(2)}`
+          }
         </button>
       </div>
+
+      {/* ── Payment Sheet Overlay ────────────────────────────────────────────── */}
+      {showPaymentSheet && clientSecret && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowPaymentSheet(false)}
+          />
+          {/* Sheet */}
+          <div className="relative w-full max-w-[480px] bg-white rounded-t-2xl px-6 pt-6 pb-10 shadow-2xl">
+            {/* Drag handle */}
+            <div className="w-10 h-1 bg-[#E0E0E0] rounded-full mx-auto mb-5" />
+            <Elements
+              stripe={stripePromise}
+              options={{
+                clientSecret,
+                appearance: {
+                  theme: 'stripe',
+                  variables: {
+                    colorPrimary: '#1A73E8',
+                    borderRadius: '10px',
+                    fontFamily: 'system-ui, sans-serif',
+                  },
+                },
+              }}
+            >
+              <PaymentSheetForm
+                amount={discountedTotal}
+                onSuccess={insertOrder}
+                onClose={() => setShowPaymentSheet(false)}
+              />
+            </Elements>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
