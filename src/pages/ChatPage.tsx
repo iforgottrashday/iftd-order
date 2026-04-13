@@ -159,41 +159,49 @@ export default function ChatPage() {
     if (!orderId || !currentUserId || (!text.trim() && !imageFile)) return
     setSending(true)
 
-    let imageUrl: string | null = null
+    try {
+      let imageUrl: string | null = null
 
-    if (imageFile) {
-      const ext = imageFile.name.split('.').pop() ?? 'jpg'
-      const fileName = `${orderId}/${Date.now()}.${ext}`
-      const { error: uploadError } = await supabase.storage
-        .from('chat-images')
-        .upload(fileName, imageFile)
+      if (imageFile) {
+        const ext = imageFile.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+        const fileName = `${orderId}/${Date.now()}.${ext}`
+        const contentType = imageFile.type || (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`)
 
-      if (!uploadError) {
+        const { error: uploadError } = await supabase.storage
+          .from('chat-images')
+          .upload(fileName, imageFile, { contentType, upsert: false })
+
+        if (uploadError) throw new Error(`Image upload failed: ${uploadError.message}`)
+
         const { data: urlData } = supabase.storage.from('chat-images').getPublicUrl(fileName)
         imageUrl = urlData?.publicUrl ?? null
       }
+
+      const { data: inserted, error } = await supabase.from('chat_messages').insert({
+        order_id: orderId,
+        sender_id: currentUserId,
+        sender_role: 'customer',
+        content: text.trim() || ' ',
+        image_url: imageUrl,
+      }).select().single()
+
+      if (error) throw new Error(error.message)
+
+      if (inserted) {
+        setMessages(prev =>
+          prev.some(m => m.id === (inserted as ChatMessage).id)
+            ? prev
+            : [...prev, inserted as ChatMessage]
+        )
+      }
+
+      setText('')
+      clearImage()
+    } catch (e: any) {
+      alert(e.message ?? 'Could not send message. Please try again.')
+    } finally {
+      setSending(false)
     }
-
-    const { data: inserted, error } = await supabase.from('chat_messages').insert({
-      order_id: orderId,
-      sender_id: currentUserId,
-      sender_role: 'customer',
-      content: text.trim() || ' ',
-      image_url: imageUrl,
-    }).select().single()
-
-    if (!error && inserted) {
-      // Optimistically add the sent message — real-time may or may not echo it back
-      setMessages(prev =>
-        prev.some(m => m.id === (inserted as ChatMessage).id)
-          ? prev
-          : [...prev, inserted as ChatMessage]
-      )
-    }
-
-    setText('')
-    clearImage()
-    setSending(false)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
