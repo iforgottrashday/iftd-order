@@ -168,13 +168,22 @@ export default function ChatPage() {
       }
     }
 
-    await supabase.from('chat_messages').insert({
+    const { data: inserted, error } = await supabase.from('chat_messages').insert({
       order_id: orderId,
       sender_id: currentUserId,
       sender_role: 'customer',
-      content: text.trim() || null,
+      content: text.trim() || ' ',
       image_url: imageUrl,
-    })
+    }).select().single()
+
+    if (!error && inserted) {
+      // Optimistically add the sent message — real-time may or may not echo it back
+      setMessages(prev =>
+        prev.some(m => m.id === (inserted as ChatMessage).id)
+          ? prev
+          : [...prev, inserted as ChatMessage]
+      )
+    }
 
     setText('')
     clearImage()
