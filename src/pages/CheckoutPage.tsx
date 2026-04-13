@@ -376,7 +376,7 @@ export default function CheckoutPage() {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/create-payment-intent', {
+      const res = await fetch('/api/create-payment-intent.cjs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: discountedTotal }),

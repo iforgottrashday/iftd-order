@@ -21,7 +21,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const stripe = new Stripe(key, { apiVersion: '2025-03-31.basil' })
+    const stripe = new Stripe(key)
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100),
       currency: 'usd',
