@@ -194,7 +194,7 @@ function PaymentSheetForm({ amount, onSuccess, onClose }: PaymentSheetFormProps)
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-[#1A1A1A]">Payment</h2>
-          <p className="text-sm text-[#666666] mt-0.5">Charged when pickup is complete</p>
+          <p className="text-sm text-[#666666] mt-0.5">Charged securely now</p>
         </div>
         <button
           onClick={onClose}
@@ -379,7 +379,7 @@ export default function CheckoutPage() {
       const res = await fetch('/api/create-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: discountedTotal }),
+        body: JSON.stringify({ amount: discountedTotal, userId: user.id, email: user.email }),
       })
       const data = await res.json()
       if (!res.ok || !data.clientSecret) throw new Error(data.error ?? 'Could not initialize payment.')
@@ -557,7 +557,7 @@ export default function CheckoutPage() {
         <div>
           <p className="text-sm font-medium text-[#1A1A1A]">Payment</p>
           <p className="text-xs text-[#666666] mt-0.5">
-            Your payment is authorized when you place your order. You will not be charged until your pickup is completed.
+            Your card is charged when you place your order. If no hauler claims your pickup, you'll receive a full refund automatically.
           </p>
         </div>
       </section>

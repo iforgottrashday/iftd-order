@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { MapPin, Clock, Package, ArrowLeft, CheckCircle, Circle, MessageCircle } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
+import { MapPin, Clock, Package, ArrowLeft, CheckCircle, Circle, MessageCircle, XCircle } from 'lucide-react'
 
 type OrderStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled'
 
@@ -66,9 +67,13 @@ function StatusBadge({ status }: { status: OrderStatus }) {
 export default function OrderStatusPage() {
   const { orderId } = useParams<{ orderId: string }>()
   const navigate = useNavigate()
+  const { session } = useAuth()
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState('')
 
   useEffect(() => {
     if (!orderId) return
@@ -126,6 +131,30 @@ export default function OrderStatusPage() {
   }
 
   const currentStatusIndex = STATUS_ORDER.indexOf(order.status)
+
+  async function handleCancelOrder() {
+    if (!session?.access_token) { setCancelError('Not signed in.'); return }
+    setCancelling(true)
+    setCancelError('')
+    try {
+      const res = await fetch('/api/cancel-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ orderId: order!.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not cancel order.')
+      setOrder(prev => prev ? { ...prev, status: 'cancelled' } : prev)
+      setShowCancelModal(false)
+    } catch (err: unknown) {
+      setCancelError(err instanceof Error ? err.message : 'Could not cancel order.')
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   return (
     <div className="px-4 py-6 flex flex-col gap-6">
@@ -272,6 +301,55 @@ export default function OrderStatusPage() {
           <span>${(order.pricing?.total ?? order.total ?? 0).toFixed(2)}</span>
         </div>
       </section>
+
+      {/* Cancel Order (pending only) */}
+      {order.status === 'pending' && (
+        <button
+          onClick={() => { setCancelError(''); setShowCancelModal(true) }}
+          className="flex items-center justify-center gap-2 w-full border border-[#EF4444] text-[#EF4444] font-semibold py-3 rounded-xl text-sm hover:bg-red-50 transition-colors"
+        >
+          <XCircle size={18} />
+          Cancel Order
+        </button>
+      )}
+
+      {/* Cancel confirmation modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-8">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-[480px] flex flex-col gap-4 shadow-xl">
+            <h2 className="text-lg font-bold text-[#1A1A1A]">Cancel this order?</h2>
+            <p className="text-sm text-[#666666]">
+              Your order will be cancelled and a full refund of{' '}
+              <span className="font-semibold text-[#1A1A1A]">
+                ${(order.pricing?.total ?? order.total ?? 0).toFixed(2)}
+              </span>{' '}
+              will be returned to your original payment method within 3–5 business days.
+            </p>
+            {cancelError && (
+              <p className="text-xs font-medium text-[#EF4444]">{cancelError}</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCancelModal(false)}
+                disabled={cancelling}
+                className="flex-1 border border-[#E0E0E0] text-[#1A1A1A] font-semibold py-3 rounded-xl text-sm hover:bg-[#F5F5F5] transition-colors disabled:opacity-50"
+              >
+                Keep Order
+              </button>
+              <button
+                onClick={handleCancelOrder}
+                disabled={cancelling}
+                className="flex-1 bg-[#EF4444] text-white font-semibold py-3 rounded-xl text-sm hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {cancelling ? (
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : null}
+                {cancelling ? 'Cancelling…' : 'Yes, Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
