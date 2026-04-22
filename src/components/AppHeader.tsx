@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { User, LogOut, Package, Settings, Bell, Star } from 'lucide-react'
+import { User, LogOut, Package, Menu, Bell, Star } from 'lucide-react'
 
 export default function AppHeader() {
   const { user, signOut } = useAuth()
@@ -64,7 +64,7 @@ export default function AppHeader() {
                   className="flex items-center justify-center w-9 h-9 rounded-full bg-[#1A73E8] text-white"
                   aria-label="Account menu"
                 >
-                  <User size={18} />
+                  <Menu size={20} />
                 </button>
 
                 {menuOpen && (
@@ -105,7 +105,7 @@ export default function AppHeader() {
                         onClick={() => setMenuOpen(false)}
                         className="flex items-center gap-3 px-4 py-3 text-[#1A1A1A] hover:bg-[#F5F5F5] text-sm"
                       >
-                        <Settings size={16} />
+                        <User size={16} />
                         Profile
                       </Link>
                       <button
