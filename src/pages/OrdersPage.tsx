@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { ChevronRight, Package, Plus } from 'lucide-react'
+import { ChevronRight, Package, Plus, RefreshCw } from 'lucide-react'
 
 type OrderStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled'
 
@@ -80,23 +80,27 @@ export default function OrdersPage() {
   const { user } = useAuth()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const fetchOrders = useCallback(async () => {
+    if (!user) return
+    const { data } = await supabase
+      .from('orders')
+      .select('id, status, location, scheduled_date, scheduled_hour, items, pricing, total, created_at')
+      .eq('customer_id', user.id)
+      .order('created_at', { ascending: false })
+    setOrders((data ?? []) as Order[])
+  }, [user])
 
   useEffect(() => {
-    if (!user) return
+    fetchOrders().then(() => setLoading(false))
+  }, [fetchOrders])
 
-    const fetchOrders = async () => {
-      const { data } = await supabase
-        .from('orders')
-        .select('id, status, location, scheduled_date, scheduled_hour, items, pricing, total, created_at')
-        .eq('customer_id', user.id)
-        .order('created_at', { ascending: false })
-
-      setOrders((data ?? []) as Order[])
-      setLoading(false)
-    }
-
-    fetchOrders()
-  }, [user])
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await fetchOrders()
+    setRefreshing(false)
+  }
 
   const activeOrders = orders.filter((o) => ['pending', 'accepted', 'in_progress'].includes(o.status))
   const pastOrders = orders.filter((o) => ['completed', 'cancelled'].includes(o.status))
@@ -106,13 +110,23 @@ export default function OrdersPage() {
       {/* Header */}
       <div className="px-4 py-5 border-b border-[#E0E0E0] flex items-center justify-between">
         <h1 className="text-xl font-bold text-[#1A1A1A]">My Orders</h1>
-        <Link
-          to="/request"
-          className="flex items-center gap-1 text-[#1A73E8] text-sm font-medium"
-        >
-          <Plus size={16} />
-          New
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            aria-label="Refresh orders"
+            className="text-[#666666] hover:text-[#1A73E8] disabled:opacity-40 transition-colors"
+          >
+            <RefreshCw size={17} className={refreshing ? 'animate-spin' : ''} />
+          </button>
+          <Link
+            to="/request"
+            className="flex items-center gap-1 text-[#1A73E8] text-sm font-medium"
+          >
+            <Plus size={16} />
+            New
+          </Link>
+        </div>
       </div>
 
       {loading ? (

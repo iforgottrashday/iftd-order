@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { MapPin, Clock, Package, ArrowLeft, CheckCircle, Circle, MessageCircle, XCircle } from 'lucide-react'
+import { MapPin, Clock, Package, ArrowLeft, CheckCircle, Circle, MessageCircle, XCircle, RefreshCw } from 'lucide-react'
 
 type OrderStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled'
 
@@ -74,26 +74,31 @@ export default function OrderStatusPage() {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+
+  const fetchOrder = useCallback(async () => {
+    if (!orderId) return
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id, status, location, scheduled_date, scheduled_hour, hauler_id, items, pricing, total, photo_url, private_notes, created_at')
+      .eq('id', orderId)
+      .single()
+    if (error) {
+      setError('Order not found.')
+    } else {
+      setOrder(data as Order)
+    }
+  }, [orderId])
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await fetchOrder()
+    setRefreshing(false)
+  }
 
   useEffect(() => {
     if (!orderId) return
-
-    const fetchOrder = async () => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('id, status, location, scheduled_date, scheduled_hour, hauler_id, items, pricing, total, photo_url, private_notes, created_at')
-        .eq('id', orderId)
-        .single()
-
-      if (error) {
-        setError('Order not found.')
-      } else {
-        setOrder(data as Order)
-      }
-      setLoading(false)
-    }
-
-    fetchOrder()
+    fetchOrder().then(() => setLoading(false))
 
     // Subscribe to status changes
     const channel = supabase
@@ -168,9 +173,19 @@ export default function OrderStatusPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold text-[#1A1A1A]">Order Status</h1>
-          <p className="text-base font-bold font-mono text-[#666666] mt-0.5 tracking-widest">
-            #{order.id.slice(0, 8).toUpperCase()}
-          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-base font-bold font-mono text-[#666666] tracking-widest">
+              #{order.id.slice(0, 8).toUpperCase()}
+            </p>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="Refresh order status"
+              className="text-[#999999] hover:text-[#1A73E8] disabled:opacity-40 transition-colors"
+            >
+              <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
         <StatusBadge status={order.status} />
       </div>
