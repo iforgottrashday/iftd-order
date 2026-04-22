@@ -172,20 +172,20 @@ export default function OrderStatusPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-[#1A1A1A]">Order Status</h1>
-          <div className="flex items-center gap-2 mt-0.5">
-            <p className="text-base font-bold font-mono text-[#666666] tracking-widest">
-              #{order.id.slice(0, 8).toUpperCase()}
-            </p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-[#1A1A1A]">Order Status</h1>
             <button
               onClick={handleRefresh}
               disabled={refreshing}
               aria-label="Refresh order status"
               className="text-[#999999] hover:text-[#1A73E8] disabled:opacity-40 transition-colors"
             >
-              <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
+              <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
             </button>
           </div>
+          <p className="text-base font-bold font-mono text-[#666666] mt-0.5 tracking-widest">
+            #{order.id.slice(0, 8).toUpperCase()}
+          </p>
         </div>
         <StatusBadge status={order.status} />
       </div>

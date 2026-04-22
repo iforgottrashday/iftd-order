@@ -1,12 +1,12 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Home, Trash2, Package, User } from 'lucide-react'
+import { Home, Trash2, Package, Star } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 
 const TABS = [
   { to: '/', label: 'Home', Icon: Home },
   { to: '/request', label: 'Request', Icon: Trash2, requiresAuth: true },
   { to: '/orders', label: 'Orders', Icon: Package, requiresAuth: true },
-  { to: '/profile', label: 'Profile', Icon: User, requiresAuth: true },
+  { to: '/rewards', label: 'Rewards', Icon: Star, requiresAuth: true },
 ]
 
 export default function BottomNav() {

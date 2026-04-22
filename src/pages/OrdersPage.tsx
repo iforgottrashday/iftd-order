@@ -109,24 +109,24 @@ export default function OrdersPage() {
     <div className="flex flex-col">
       {/* Header */}
       <div className="px-4 py-5 border-b border-[#E0E0E0] flex items-center justify-between">
-        <h1 className="text-xl font-bold text-[#1A1A1A]">My Orders</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-[#1A1A1A]">My Orders</h1>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
             aria-label="Refresh orders"
-            className="text-[#666666] hover:text-[#1A73E8] disabled:opacity-40 transition-colors"
+            className="text-[#999999] hover:text-[#1A73E8] disabled:opacity-40 transition-colors"
           >
-            <RefreshCw size={17} className={refreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
           </button>
-          <Link
-            to="/request"
-            className="flex items-center gap-1 text-[#1A73E8] text-sm font-medium"
-          >
-            <Plus size={16} />
-            New
-          </Link>
         </div>
+        <Link
+          to="/request"
+          className="flex items-center gap-1 text-[#1A73E8] text-sm font-medium"
+        >
+          <Plus size={16} />
+          New
+        </Link>
       </div>
 
       {loading ? (
