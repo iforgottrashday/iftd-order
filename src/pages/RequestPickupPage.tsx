@@ -596,7 +596,6 @@ export default function RequestPickupPage() {
           ref={photoRef}
           type="file"
           accept="image/*"
-          capture="environment"
           onChange={handlePhotoChange}
           className="hidden"
         />
