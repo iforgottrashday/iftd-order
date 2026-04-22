@@ -12,7 +12,7 @@ interface ProfileData {
 
 interface ActivityItem {
   id: string
-  type: 'referral' | 'pickup' | 'redemption'
+  type: 'referral' | 'pickup' | 'redemption' | 'adjustment'
   description: string
   points: number
   date: string
@@ -45,22 +45,28 @@ export default function RewardsPage() {
       setProfile(profileData as ProfileData)
     }
 
-    // Load referral events
-    const { data: referralData } = await supabase
-      .from('referral_events')
-      .select('id, points_awarded, created_at')
-      .eq('referrer_id', user.id)
-
-    // Load completed orders
-    const { data: ordersData } = await supabase
-      .from('orders')
-      .select('id, items, created_at')
-      .eq('customer_id', user.id)
-      .eq('status', 'completed')
+    // Load all three sources in parallel
+    const [referralResult, ordersResult, ledgerResult] = await Promise.all([
+      supabase
+        .from('referral_events')
+        .select('id, points_awarded, created_at')
+        .eq('referrer_id', user.id),
+      supabase
+        .from('orders')
+        .select('id, items, created_at')
+        .eq('customer_id', user.id)
+        .eq('status', 'completed'),
+      supabase
+        .from('points_ledger')
+        .select('id, delta, reason, created_at')
+        .eq('user_id', user.id)
+        .neq('reason', 'order_complete') // exclude once award_order_points writes here
+        .order('created_at', { ascending: false }),
+    ])
 
     const items: ActivityItem[] = []
 
-    for (const ref of referralData ?? []) {
+    for (const ref of referralResult.data ?? []) {
       items.push({
         id: `ref-${ref.id}`,
         type: 'referral',
@@ -70,7 +76,7 @@ export default function RewardsPage() {
       })
     }
 
-    for (const order of ordersData ?? []) {
+    for (const order of ordersResult.data ?? []) {
       const itemCount = (order.items as Array<{ quantity?: number; qty?: number }>).reduce(
         (sum, i) => sum + (i.quantity ?? i.qty ?? 0),
         0
@@ -85,6 +91,16 @@ export default function RewardsPage() {
           date: order.created_at,
         })
       }
+    }
+
+    for (const entry of ledgerResult.data ?? []) {
+      items.push({
+        id: `ledger-${entry.id}`,
+        type: 'adjustment',
+        description: entry.reason ?? 'Points adjustment',
+        points: entry.delta,
+        date: entry.created_at,
+      })
     }
 
     items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -228,9 +244,10 @@ export default function RewardsPage() {
             <div className="divide-y divide-[#F0F0F0]">
               {activity.map((item) => {
                 const iconConfig = {
-                  referral: { bg: 'bg-green-100', text: 'text-green-700', emoji: '👥' },
-                  pickup: { bg: 'bg-blue-100', text: 'text-blue-700', emoji: '🗑️' },
-                  redemption: { bg: 'bg-red-100', text: 'text-red-600', emoji: '🏷️' },
+                  referral:   { bg: 'bg-green-100', text: 'text-green-700', emoji: '👥' },
+                  pickup:     { bg: 'bg-blue-100',  text: 'text-blue-700',  emoji: '🗑️' },
+                  redemption: { bg: 'bg-red-100',   text: 'text-red-600',   emoji: '🏷️' },
+                  adjustment: { bg: 'bg-yellow-100',text: 'text-yellow-700',emoji: '⭐' },
                 }[item.type]
 
                 return (
