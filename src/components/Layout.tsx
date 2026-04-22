@@ -8,9 +8,9 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   return (
-    <div className="min-h-screen bg-[#F5F5F5]">
+    <div className="h-screen overflow-hidden bg-[#F5F5F5]">
       <AppHeader />
-      <main className="max-w-[480px] mx-auto bg-white min-h-[calc(100vh-56px)] pb-16">
+      <main className="max-w-[480px] mx-auto w-full bg-white h-[calc(100vh-56px)] overflow-y-auto pb-16">
         {children}
       </main>
       <BottomNav />
