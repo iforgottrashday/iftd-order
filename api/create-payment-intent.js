@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       amount: Math.round(amount * 100),
       currency: 'usd',
       ...(customerId ? { customer: customerId } : {}),
-      automatic_payment_methods: { enabled: true },
+      payment_method_types: ['card'],
       metadata: {
         supabase_user_id: userId ?? '',
         source: 'iftd-order-web',
