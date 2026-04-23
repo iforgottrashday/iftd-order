@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Minus, Plus, Camera, MapPin, Search, Zap, CalendarDays, Clock, Lock, AlertCircle } from 'lucide-react'
@@ -129,6 +129,21 @@ interface AddressData {
   lng: number | null
   county: string
   state: string
+}
+
+interface RestoreState {
+  address: string
+  latitude: number | null
+  longitude: number | null
+  location_county: string
+  location_state: string
+  items: Array<{ product_id: string; quantity: number; unbagged_qty?: number }>
+  pickupType: 'now' | 'later'
+  scheduledDate: string | null
+  scheduledHour: number | null
+  notes: string
+  privateNotes: string
+  photoFile: File | null
 }
 
 function BigStepper({
@@ -289,30 +304,62 @@ function AddressSearch({
 
 export default function RequestPickupPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const restore = (location.state as { restore?: RestoreState } | null)?.restore ?? null
   const { user } = useAuth()
   const photoRef = useRef<HTMLInputElement>(null)
+  // On first render with restored state we skip the auto-hour effect once
+  const restoringRef = useRef(!!restore)
 
   const instantStatus = getInstantAvailability()
-  const [pickupType, setPickupType] = useState<'now' | 'later'>(
-    instantStatus.available ? 'now' : 'later'
+
+  const [pickupType, setPickupType] = useState<'now' | 'later'>(() => {
+    if (restore?.pickupType) return restore.pickupType
+    return instantStatus.available ? 'now' : 'later'
+  })
+
+  const [addressData, setAddressData] = useState<AddressData | null>(() => {
+    if (restore?.address) {
+      return {
+        address: restore.address,
+        lat: restore.latitude,
+        lng: restore.longitude,
+        county: restore.location_county,
+        state: restore.location_state,
+      }
+    }
+    return null
+  })
+  const [homeAddress, setHomeAddress] = useState(() => restore?.address ?? '')
+  const [trashQty, setTrashQty] = useState(() =>
+    restore?.items?.find(i => i.product_id === 'trash')?.quantity ?? 0
   )
+  const [unbaggedTrashQty, setUnbaggedTrashQty] = useState(() =>
+    restore?.items?.find(i => i.product_id === 'trash')?.unbagged_qty ?? 0
+  )
+  const [recyclingQty, setRecyclingQty] = useState(() =>
+    restore?.items?.find(i => i.product_id === 'recycling')?.quantity ?? 0
+  )
+  const [unbaggedRecyclingQty, setUnbaggedRecyclingQty] = useState(() =>
+    restore?.items?.find(i => i.product_id === 'recycling')?.unbagged_qty ?? 0
+  )
+  const [scheduledDate, setScheduledDate] = useState(() =>
+    restore?.scheduledDate ?? getDefaultDate()
+  )
+  const [scheduledHour, setScheduledHour] = useState(() =>
+    restore?.scheduledHour ?? SERVICE_START
+  )
+  const [notes, setNotes] = useState(() => restore?.notes ?? '')
+  const [privateNotes, setPrivateNotes] = useState(() => restore?.privateNotes ?? '')
+  const [photoFile, setPhotoFile] = useState<File | null>(() => restore?.photoFile ?? null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(() => {
+    if (!restore?.photoFile) return null
+    try { return URL.createObjectURL(restore.photoFile) } catch { return null }
+  })
 
-  const [addressData, setAddressData] = useState<AddressData | null>(null)
-  const [homeAddress, setHomeAddress] = useState('')
-  const [trashQty, setTrashQty] = useState(0)
-  const [unbaggedTrashQty, setUnbaggedTrashQty] = useState(0)
-  const [recyclingQty, setRecyclingQty] = useState(0)
-  const [unbaggedRecyclingQty, setUnbaggedRecyclingQty] = useState(0)
-  const [scheduledDate, setScheduledDate] = useState(getDefaultDate())
-  const [scheduledHour, setScheduledHour] = useState(SERVICE_START)
-  const [notes, setNotes] = useState('')
-  const [privateNotes, setPrivateNotes] = useState('')
-  const [photoFile, setPhotoFile] = useState<File | null>(null)
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
-
-  // Load home address from profile
+  // Load home address from profile — skip if we're restoring a previous order
   useEffect(() => {
-    if (!user) return
+    if (!user || restore) return
     supabase
       .from('profiles')
       .select('home_address, city, state, zip, home_lat, home_lng, county')
@@ -331,8 +378,12 @@ export default function RequestPickupPage() {
       })
   }, [user])
 
-  // Auto-set hour when date changes
+  // Auto-set hour when date changes (skip the initial mount when restoring)
   useEffect(() => {
+    if (restoringRef.current) {
+      restoringRef.current = false
+      return
+    }
     const today = localDateStr()
     if (scheduledDate === today) {
       const currentHour = new Date().getHours()

@@ -375,6 +375,19 @@ export default function CheckoutPage() {
     setError('')
     setLoading(true)
 
+    // Free order — skip Stripe entirely
+    if (discountedTotal === 0) {
+      try {
+        await insertOrder('points_redemption')
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to place order. Please try again.'
+        setError(msg)
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     try {
       const res = await fetch('/api/create-payment-intent', {
         method: 'POST',
@@ -398,7 +411,7 @@ export default function CheckoutPage() {
     <div className="px-4 py-6 flex flex-col gap-6 pb-44">
       <div>
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigate('/request', { state: { restore: state } })}
           className="flex items-center gap-1 text-[#1A73E8] text-sm font-medium mb-3"
         >
           <ArrowLeft size={16} />
@@ -573,8 +586,10 @@ export default function CheckoutPage() {
           className="w-full bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-60 flex items-center justify-center gap-2"
         >
           {loading
-            ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Setting up payment…</>
-            : `Place Order — $${discountedTotal.toFixed(2)}`
+            ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> {discountedTotal === 0 ? 'Placing order…' : 'Setting up payment…'}</>
+            : discountedTotal === 0
+              ? 'Place Order — FREE 🎉'
+              : `Place Order — $${discountedTotal.toFixed(2)}`
           }
         </button>
       </div>
