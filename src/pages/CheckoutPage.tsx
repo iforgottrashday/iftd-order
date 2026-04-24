@@ -295,7 +295,8 @@ export default function CheckoutPage() {
   const maxRedeemable = Math.min(freeItemsAvailable, totalItems)
   const discountAmount = freeItemsToRedeem * 20
   const discountedTotal = Math.max(0, pricing.total - discountAmount)
-  const pointsEarned = totalItems * POINTS_PER_ITEM_EARNED
+  const paidItems = Math.max(0, totalItems - freeItemsToRedeem)
+  const pointsEarned = paidItems * POINTS_PER_ITEM_EARNED
 
   // ── Insert order after payment succeeds ────────────────────────────────────
   const insertOrder = async (paymentIntentId: string) => {
@@ -559,9 +560,11 @@ export default function CheckoutPage() {
           <span>Total</span>
           <span>${discountedTotal.toFixed(2)}</span>
         </div>
-        <p className="text-xs text-[#888888] mt-1">
-          You'll earn <span className="font-semibold text-[#1A73E8]">{pointsEarned} point{pointsEarned !== 1 ? 's' : ''}</span> when this order is completed.
-        </p>
+        {pointsEarned > 0 && (
+          <p className="text-xs text-[#888888] mt-1">
+            You'll earn <span className="font-semibold text-[#1A73E8]">{pointsEarned} point{pointsEarned !== 1 ? 's' : ''}</span> when this order is completed.
+          </p>
+        )}
       </section>
 
       {/* Payment note */}
@@ -570,7 +573,10 @@ export default function CheckoutPage() {
         <div>
           <p className="text-sm font-medium text-[#1A1A1A]">Payment</p>
           <p className="text-xs text-[#666666] mt-0.5">
-            Your card is charged when you place your order. If no hauler claims your pickup, you'll receive a full refund automatically.
+            {discountedTotal === 0
+              ? 'This order is fully covered by your reward points — no card charge.'
+              : "Your card is charged when you place your order. If no hauler claims your pickup, you'll receive a full refund automatically."
+            }
           </p>
         </div>
       </section>
