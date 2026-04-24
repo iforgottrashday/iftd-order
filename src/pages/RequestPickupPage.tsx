@@ -458,6 +458,52 @@ export default function RequestPickupPage() {
       }
     }
 
+    // ── Serviceable area check ─────────────────────────────────────────────
+    const { county, state } = finalAddressData
+    if (county && state) {
+      try {
+        const orderedMaterials: string[] = []
+        if (trashQty > 0)     orderedMaterials.push('trash')
+        if (recyclingQty > 0) orderedMaterials.push('recycling')
+
+        const { data: serviceAreas } = await supabase
+          .from('disposal_site_service_areas')
+          .select('disposal_site_id')
+          .eq('county', county)
+          .eq('state', state)
+
+        if (!serviceAreas?.length) {
+          alert(
+            `Service is not yet available in ${county} County, ${state}.\n\nVisit www.iforgottrashday.com to get on the waitlist and be notified when service comes to your area.`
+          )
+          return
+        }
+
+        const { data: sites } = await supabase
+          .from('disposal_sites')
+          .select('accepted_materials')
+          .in('id', serviceAreas.map(sa => sa.disposal_site_id))
+          .eq('is_active', true)
+
+        const allAccepted = new Set<string>(
+          (sites ?? []).flatMap(s => (s as any).accepted_materials ?? [])
+        )
+        const uncovered = orderedMaterials.filter(m => !allAccepted.has(m))
+
+        if (uncovered.length > 0) {
+          const labels = uncovered
+            .map(m => m === 'trash' ? 'Residential Trash' : 'Recycling')
+            .join(' and ')
+          alert(
+            `${labels} pickup is not yet available in ${county} County, ${state}.\n\nVisit www.iforgottrashday.com to get on the waitlist and be notified when service comes to your area.`
+          )
+          return
+        }
+      } catch {
+        // Network error — allow order to proceed rather than block
+      }
+    }
+
     const items = []
     if (trashQty > 0) {
       items.push({ product_id: 'trash', label: 'Residential Trash', quantity: trashQty, unbagged_qty: unbaggedTrashQty })
