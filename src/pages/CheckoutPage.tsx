@@ -352,6 +352,15 @@ export default function CheckoutPage() {
       const { error: insertError } = await supabase.from('orders').insert(payload)
       if (insertError) throw new Error(insertError.message)
 
+      // Deduct redeemed points from the customer's balance
+      if (freeItemsToRedeem > 0) {
+        const pointsToDeduct = freeItemsToRedeem * POINTS_PER_FREE_ITEM
+        await supabase
+          .from('profiles')
+          .update({ points_balance: Math.max(0, pointsBalance - pointsToDeduct) })
+          .eq('id', user.id)
+      }
+
       const { data: newOrder, error: fetchError } = await supabase
         .from('orders')
         .select('id')
