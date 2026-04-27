@@ -50,13 +50,13 @@ export default function SignUpPage() {
 
     const userId = data.user?.id
     if (userId) {
-      const { error: profileError } = await supabase.from('profiles').insert({
+      const { error: profileError } = await supabase.from('profiles').upsert({
         id: userId,
         first_name: form.firstName,
         last_name: form.lastName,
         phone: form.phone || null,
         account_type: 'customer',
-      })
+      }, { onConflict: 'id' })
 
       if (profileError) {
         // Profile row may already exist from trigger — not fatal
