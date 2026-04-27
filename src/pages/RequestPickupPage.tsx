@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
+import { initGoogleMaps, parseAddressComponents } from '@/lib/googleMaps'
 import { Minus, Plus, Camera, MapPin, Search, Zap, CalendarDays, Clock, Lock, AlertCircle, X } from 'lucide-react'
 import { MapContainer, TileLayer, useMapEvents, useMap } from 'react-leaflet'
 
@@ -106,22 +107,9 @@ function getHourLabel(h: number): string {
 }
 
 
-interface NominatimResult {
-  place_id: number
-  display_name: string
-  lat: string
-  lon: string
-  address: {
-    house_number?: string
-    road?: string
-    suburb?: string
-    city?: string
-    town?: string
-    village?: string
-    county?: string
-    state?: string
-    postcode?: string
-  }
+interface PlaceSuggestion {
+  place_id: string
+  description: string
 }
 
 interface AddressData {
@@ -213,8 +201,8 @@ function AddressSearch({
   initial: string
   onSelect: (data: AddressData) => void
 }) {
-  const [query, setQuery] = useState(initial)
-  const [results, setResults] = useState<NominatimResult[]>([])
+  const [query,     setQuery]     = useState(initial)
+  const [results,   setResults]   = useState<PlaceSuggestion[]>([])
   const [searching, setSearching] = useState(false)
   const [confirmed, setConfirmed] = useState(!!initial)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -224,45 +212,63 @@ function AddressSearch({
     setConfirmed(!!initial)
   }, [initial])
 
+  // Pre-warm the Google Maps API on mount
+  useEffect(() => { initGoogleMaps().catch(() => {}) }, [])
+
   const search = (q: string) => {
     setQuery(q)
     setConfirmed(false)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (q.trim().length < 5) {
-      setResults([])
-      return
-    }
+    if (q.trim().length < 3) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
       try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(q)}&countrycodes=us`
-        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } })
-        const data: NominatimResult[] = await res.json()
-        setResults(data)
+        await initGoogleMaps()
+        const svc = new window.google.maps.places.AutocompleteService()
+        svc.getPlacePredictions(
+          { input: q, componentRestrictions: { country: 'us' }, types: ['address'] },
+          (predictions, status) => {
+            setSearching(false)
+            if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+              setResults(predictions.map(p => ({ place_id: p.place_id, description: p.description })))
+            } else {
+              setResults([])
+            }
+          },
+        )
       } catch {
-        setResults([])
-      } finally {
         setSearching(false)
+        setResults([])
       }
-    }, 500)
+    }, 300)
   }
 
-  const pick = (r: NominatimResult) => {
-    const { house_number, road, city, town, village, county, state, postcode } = r.address
-    const street = [house_number, road].filter(Boolean).join(' ')
-    const cityName = city || town || village || ''
-    const fullAddress = [street, cityName, state, postcode].filter(Boolean).join(', ')
-    const countyClean = (county ?? '').replace(/ County$| Parish$| Borough$/i, '')
-    setQuery(fullAddress)
+  const pick = async (suggestion: PlaceSuggestion) => {
     setResults([])
-    setConfirmed(true)
-    onSelect({
-      address: fullAddress,
-      lat: parseFloat(r.lat),
-      lng: parseFloat(r.lon),
-      county: countyClean,
-      state: state ?? '',
-    })
+    setSearching(true)
+    try {
+      await initGoogleMaps()
+      const svc = new window.google.maps.places.PlacesService(document.createElement('div'))
+      svc.getDetails(
+        { placeId: suggestion.place_id, fields: ['geometry', 'address_components', 'formatted_address'] },
+        (place, status) => {
+          setSearching(false)
+          if (status === window.google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
+            const lat = place.geometry.location.lat()
+            const lng = place.geometry.location.lng()
+            const { formattedAddress, county, state } = parseAddressComponents(
+              place.address_components ?? [],
+              place.formatted_address ?? suggestion.description,
+            )
+            setQuery(formattedAddress)
+            setConfirmed(true)
+            onSelect({ address: formattedAddress, lat, lng, county, state })
+          }
+        },
+      )
+    } catch {
+      setSearching(false)
+    }
   }
 
   return (
@@ -285,9 +291,7 @@ function AddressSearch({
           <MapPin size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#22C55E]" />
         )}
       </div>
-      {searching && (
-        <p className="text-xs text-[#999] px-1">Searching...</p>
-      )}
+      {searching && <p className="text-xs text-[#999] px-1">Searching...</p>}
       {results.length > 0 && (
         <div className="border border-[#E0E0E0] rounded-xl overflow-hidden shadow-md bg-white absolute top-full left-0 right-0 z-30 mt-1">
           {results.map((r) => (
@@ -297,7 +301,7 @@ function AddressSearch({
               onClick={() => pick(r)}
               className="w-full text-left px-4 py-3 text-sm text-[#1A1A1A] hover:bg-[#F5F5F5] border-b border-[#E0E0E0] last:border-0"
             >
-              {r.display_name}
+              {r.description}
             </button>
           ))}
         </div>
@@ -374,25 +378,30 @@ function PinDropModal({
   const [label, setLabel]           = useState('')
   const [geocoding, setGeocoding]   = useState(false)
   const [confirming, setConfirming] = useState(false)
+  // County/state stored during reverse geocode so confirm doesn't need another API call
+  const [countyState, setCountyState] = useState({ county: '', state: '' })
 
   // Search bar state
-  const [searchQuery, setSearchQuery]   = useState('')
-  const [searchResults, setSearchResults] = useState<NominatimResult[]>([])
-  const [searching, setSearching]         = useState(false)
+  const [searchQuery,   setSearchQuery]   = useState('')
+  const [searchResults, setSearchResults] = useState<PlaceSuggestion[]>([])
+  const [searching,     setSearching]     = useState(false)
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const moveDebounceRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Pre-warm Google Maps on mount
+  useEffect(() => { initGoogleMaps().catch(() => {}) }, [])
 
   const reverseGeocode = async (lat: number, lng: number) => {
     setGeocoding(true)
     try {
-      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`
-      const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } })
-      const data = await res.json()
-      if (data?.address) {
-        const { house_number, road, city, town, village, state, postcode } = data.address
-        const street   = [house_number, road].filter(Boolean).join(' ')
-        const cityName = city || town || village || ''
-        setLabel([street, cityName, state, postcode].filter(Boolean).join(', ') || data.display_name || '')
+      await initGoogleMaps()
+      const geocoder = new window.google.maps.Geocoder()
+      const result   = await geocoder.geocode({ location: { lat, lng } })
+      if (result.results.length > 0) {
+        const r = result.results[0]
+        setLabel(r.formatted_address)
+        const { county, state } = parseAddressComponents(r.address_components, r.formatted_address)
+        setCountyState({ county, state })
       }
     } catch { /* ignore */ }
     finally { setGeocoding(false) }
@@ -412,47 +421,63 @@ function PinDropModal({
     searchDebounceRef.current = setTimeout(async () => {
       setSearching(true)
       try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=4&q=${encodeURIComponent(q)}&countrycodes=us`
-        const res     = await fetch(url, { headers: { 'Accept-Language': 'en' } })
-        const results: NominatimResult[] = await res.json()
-        setSearchResults(results)
-        // Auto-fly to the first result so user doesn't have to click.
-        // Zoom to 19 (individual house level) so they can fine-tune easily.
-        if (results.length > 0) {
-          const first = results[0]
-          const lat = parseFloat(first.lat)
-          const lng = parseFloat(first.lon)
-          setFlyTarget([lat, lng])
-          setCenter({ lat, lng })
-          reverseGeocode(lat, lng)
-        }
-      } catch { /* ignore */ }
-      finally { setSearching(false) }
-    }, 600)
+        await initGoogleMaps()
+        const svc = new window.google.maps.places.AutocompleteService()
+        svc.getPlacePredictions(
+          { input: q, componentRestrictions: { country: 'us' }, types: ['address'] },
+          (predictions, status) => {
+            setSearching(false)
+            if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+              const suggestions = predictions.map(p => ({ place_id: p.place_id, description: p.description }))
+              setSearchResults(suggestions)
+              // Auto-fly to first result
+              if (suggestions.length > 0) handleSearchPick(suggestions[0], true)
+            } else {
+              setSearchResults([])
+            }
+          },
+        )
+      } catch {
+        setSearching(false)
+      }
+    }, 400)
   }
 
-  const handleSearchPick = (r: NominatimResult) => {
-    const lat = parseFloat(r.lat)
-    const lng = parseFloat(r.lon)
-    setFlyTarget([lat, lng])
-    setCenter({ lat, lng })
-    setSearchQuery('')
-    setSearchResults([])
-    reverseGeocode(lat, lng)
+  const handleSearchPick = (suggestion: PlaceSuggestion, keepResults = false) => {
+    if (!keepResults) {
+      setSearchQuery('')
+      setSearchResults([])
+    }
+    initGoogleMaps().then(() => {
+      const svc = new window.google.maps.places.PlacesService(document.createElement('div'))
+      svc.getDetails(
+        { placeId: suggestion.place_id, fields: ['geometry', 'address_components', 'formatted_address'] },
+        (place, status) => {
+          if (status === window.google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
+            const lat = place.geometry.location.lat()
+            const lng = place.geometry.location.lng()
+            setFlyTarget([lat, lng])
+            setCenter({ lat, lng })
+            const formatted = place.formatted_address ?? suggestion.description
+            setLabel(formatted)
+            const { county, state } = parseAddressComponents(place.address_components ?? [], formatted)
+            setCountyState({ county, state })
+          }
+        },
+      )
+    }).catch(() => {})
   }
 
-  const handleConfirm = async () => {
+  const handleConfirm = () => {
     setConfirming(true)
-    try {
-      const url  = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${center.lat}&lon=${center.lng}&addressdetails=1`
-      const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } })
-      const data = await res.json()
-      const { county, state } = data?.address ?? {}
-      const countyClean = (county ?? '').replace(/ County$| Parish$| Borough$/i, '')
-      onConfirm({ address: label || 'Pinned location', lat: center.lat, lng: center.lng, county: countyClean, state: state ?? '' })
-    } catch {
-      onConfirm({ address: label || 'Pinned location', lat: center.lat, lng: center.lng, county: '', state: '' })
-    } finally { setConfirming(false) }
+    onConfirm({
+      address: label || 'Pinned location',
+      lat: center.lat,
+      lng: center.lng,
+      county: countyState.county,
+      state: countyState.state,
+    })
+    setConfirming(false)
   }
 
   return (
@@ -491,7 +516,7 @@ function PinDropModal({
                 onClick={() => handleSearchPick(r)}
                 className="w-full text-left px-4 py-3 text-sm text-[#1A1A1A] hover:bg-[#F5F5F5] border-b border-[#E0E0E0] last:border-0"
               >
-                {r.display_name}
+                {r.description}
               </button>
             ))}
           </div>
@@ -686,19 +711,20 @@ export default function RequestPickupPage() {
     let finalAddressData = addressData
     if (!finalAddressData.lat || !finalAddressData.lng) {
       try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(finalAddressData.address)}&countrycodes=us`
-        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } })
-        const results: NominatimResult[] = await res.json()
-        if (results.length > 0) {
-          const r = results[0]
-          const countyRaw = r.address.county ?? ''
-          const countyClean = countyRaw.replace(/ County$| Parish$| Borough$/i, '')
+        await initGoogleMaps()
+        const geocoder = new window.google.maps.Geocoder()
+        const result = await geocoder.geocode({ address: finalAddressData.address })
+        if (result.results.length > 0) {
+          const r = result.results[0]
+          const lat = r.geometry.location.lat()
+          const lng = r.geometry.location.lng()
+          const { county, state: st } = parseAddressComponents(r.address_components, r.formatted_address)
           finalAddressData = {
             address: finalAddressData.address,
-            lat: parseFloat(r.lat),
-            lng: parseFloat(r.lon),
-            county: countyClean || finalAddressData.county,
-            state: r.address.state ?? finalAddressData.state,
+            lat,
+            lng,
+            county: county || finalAddressData.county,
+            state: st || finalAddressData.state,
           }
           setAddressData(finalAddressData)
         } else {
@@ -712,24 +738,9 @@ export default function RequestPickupPage() {
     }
 
     // ── Serviceable area check ─────────────────────────────────────────────
+    // Google Places returns short state codes (e.g. "OH") directly — no mapping needed
     const { county } = finalAddressData
-    // Nominatim returns full state names ("Florida"); DB stores abbreviations ("FL")
-    const STATE_ABBREVS: Record<string, string> = {
-      'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA',
-      'Colorado':'CO','Connecticut':'CT','Delaware':'DE','Florida':'FL','Georgia':'GA',
-      'Hawaii':'HI','Idaho':'ID','Illinois':'IL','Indiana':'IN','Iowa':'IA',
-      'Kansas':'KS','Kentucky':'KY','Louisiana':'LA','Maine':'ME','Maryland':'MD',
-      'Massachusetts':'MA','Michigan':'MI','Minnesota':'MN','Mississippi':'MS',
-      'Missouri':'MO','Montana':'MT','Nebraska':'NE','Nevada':'NV',
-      'New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM','New York':'NY',
-      'North Carolina':'NC','North Dakota':'ND','Ohio':'OH','Oklahoma':'OK',
-      'Oregon':'OR','Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC',
-      'South Dakota':'SD','Tennessee':'TN','Texas':'TX','Utah':'UT','Vermont':'VT',
-      'Virginia':'VA','Washington':'WA','West Virginia':'WV','Wisconsin':'WI',
-      'Wyoming':'WY','District of Columbia':'DC',
-    }
-    const rawState = finalAddressData.state
-    const state = /^[A-Z]{2}$/.test(rawState) ? rawState : (STATE_ABBREVS[rawState] ?? rawState)
+    const state = finalAddressData.state
     if (county && state) {
       try {
         const orderedMaterials: string[] = []
