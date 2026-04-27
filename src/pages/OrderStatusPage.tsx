@@ -14,7 +14,15 @@ interface Order {
   scheduled_hour: number | null
   hauler_id: string | null
   items: Array<{ product_id?: string; id?: string; label: string; quantity?: number; qty?: number; bags?: number; unbagged_qty?: number }>
-  pricing: { subtotal: number; disposalFee: number; serviceFee: number; total: number } | null
+  pricing: {
+    subtotal: number
+    disposalFee: number
+    serviceFee: number
+    total: number
+    pointsRedeemed?: number
+    pointsDiscount?: number
+    chargedAmount?: number
+  } | null
   total: number | null
   photo_url: string | null
   private_notes: string | null
@@ -309,12 +317,34 @@ export default function OrderStatusPage() {
         </section>
       )}
 
-      {/* Total */}
-      <section className="border border-[#E0E0E0] rounded-xl p-4">
-        <div className="flex justify-between font-bold text-[#1A1A1A] text-base">
-          <span>Total</span>
-          <span>${(order.pricing?.total ?? order.total ?? 0).toFixed(2)}</span>
-        </div>
+      {/* Payment breakdown */}
+      <section className="border border-[#E0E0E0] rounded-xl p-4 flex flex-col gap-1.5">
+        {(order.pricing?.pointsDiscount ?? 0) > 0 ? (
+          <>
+            <div className="flex justify-between text-[#666666] text-sm">
+              <span>Subtotal</span>
+              <span>${(order.pricing!.total).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-green-700 text-sm font-medium">
+              <span>Points discount ({order.pricing!.pointsRedeemed} pts)</span>
+              <span>−${(order.pricing!.pointsDiscount!).toFixed(2)}</span>
+            </div>
+            <div className="border-t border-[#E0E0E0] my-0.5" />
+            <div className="flex justify-between font-bold text-[#1A1A1A] text-base">
+              <span>Charged</span>
+              <span>
+                {order.pricing!.chargedAmount === 0
+                  ? <span className="text-green-700">FREE 🎉</span>
+                  : `$${(order.pricing!.chargedAmount!).toFixed(2)}`}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="flex justify-between font-bold text-[#1A1A1A] text-base">
+            <span>Total</span>
+            <span>${(order.pricing?.chargedAmount ?? order.pricing?.total ?? order.total ?? 0).toFixed(2)}</span>
+          </div>
+        )}
       </section>
 
       {/* Cancel Order (pending only) */}
@@ -334,11 +364,17 @@ export default function OrderStatusPage() {
           <div className="bg-white rounded-2xl p-6 w-full max-w-[480px] flex flex-col gap-4 shadow-xl">
             <h2 className="text-lg font-bold text-[#1A1A1A]">Cancel this order?</h2>
             <p className="text-sm text-[#666666]">
-              Your order will be cancelled and a full refund of{' '}
-              <span className="font-semibold text-[#1A1A1A]">
-                ${(order.pricing?.total ?? order.total ?? 0).toFixed(2)}
-              </span>{' '}
-              will be returned to your original payment method within 3–5 business days.
+              {(() => {
+                const charged = order.pricing?.chargedAmount ?? order.total ?? 0
+                const points  = order.pricing?.pointsRedeemed ?? 0
+                if (charged === 0 && points > 0) {
+                  return <>Your order will be cancelled and your <span className="font-semibold text-[#1A1A1A]">{points} reward points</span> will be restored to your account.</>
+                }
+                if (charged > 0 && points > 0) {
+                  return <>Your order will be cancelled. A refund of <span className="font-semibold text-[#1A1A1A]">${charged.toFixed(2)}</span> will be returned to your payment method within 3–5 business days, and your <span className="font-semibold text-[#1A1A1A]">{points} reward points</span> will be restored.</>
+                }
+                return <>Your order will be cancelled and a full refund of <span className="font-semibold text-[#1A1A1A]">${charged.toFixed(2)}</span> will be returned to your original payment method within 3–5 business days.</>
+              })()}
             </p>
             {cancelError && (
               <p className="text-xs font-medium text-[#EF4444]">{cancelError}</p>

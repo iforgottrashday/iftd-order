@@ -338,7 +338,12 @@ export default function CheckoutPage() {
         notes: notes || '',
         private_notes: privateNotes || '',
         photo_url: photoUrl,
-        pricing,
+        pricing: {
+          ...pricing,
+          pointsRedeemed:  freeItemsToRedeem * POINTS_PER_FREE_ITEM,
+          pointsDiscount:  discountAmount,
+          chargedAmount:   discountedTotal,
+        },
         total: discountedTotal,
         points_redeemed: freeItemsToRedeem > 0 ? freeItemsToRedeem * POINTS_PER_FREE_ITEM : null,
         payment_result: { authorized: true, transactionId: paymentIntentId },
