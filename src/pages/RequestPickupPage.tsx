@@ -269,10 +269,13 @@ function AddressSearch({
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
         <input
+          id="pickupAddress"
+          name="pickupAddress"
           type="text"
           value={query}
           onChange={(e) => search(e.target.value)}
           placeholder="123 Main St, Cincinnati, OH 45202"
+          autoComplete="street-address"
           className={`w-full border rounded-lg pl-9 pr-4 py-3 text-[#1A1A1A] text-base focus:outline-none bg-white ${
             confirmed ? 'border-[#22C55E]' : 'border-[#E0E0E0] focus:border-[#1A73E8]'
           }`}
@@ -741,6 +744,8 @@ export default function RequestPickupPage() {
       <section className="flex flex-col gap-3">
         <h2 className="text-base font-bold text-[#1A1A1A]">Step 4: Notes for your hauler <span className="font-normal text-[#666666] text-sm">(optional)</span></h2>
         <textarea
+          id="notes"
+          name="notes"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="e.g. Cans are on the left side of the driveway..."
@@ -753,6 +758,8 @@ export default function RequestPickupPage() {
           </p>
           <p className="text-xs text-[#666666]">Only visible to your hauler after they accept</p>
           <textarea
+            id="privateNotes"
+            name="privateNotes"
             value={privateNotes}
             onChange={(e) => setPrivateNotes(e.target.value)}
             placeholder="e.g. Gate code: 1234, ring doorbell on arrival..."
