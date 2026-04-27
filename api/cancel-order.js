@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const stripeKey = process.env.STRIPE_SECRET_KEY
 
-  if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
+  if (!supabaseUrl || !serviceRoleKey) {
     return res.status(500).json({ error: 'Server configuration error.' })
   }
 
@@ -21,18 +21,16 @@ export default async function handler(req, res) {
   const authHeader = req.headers.authorization
   if (!authHeader) return res.status(401).json({ error: 'Not authenticated.' })
 
-  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
-  })
-  const { data: { user } } = await userClient.auth.getUser()
-  if (!user) return res.status(401).json({ error: 'Invalid session.' })
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim()
+  const adminClient = createClient(supabaseUrl, serviceRoleKey)
+  const { data: { user }, error: authError } = await adminClient.auth.getUser(token)
+  if (authError || !user) return res.status(401).json({ error: 'Invalid session.' })
 
   // ── Validate input ────────────────────────────────────────────────────────
   const { orderId } = req.body || {}
   if (!orderId) return res.status(400).json({ error: 'orderId is required.' })
 
-  // ── Fetch order with service role ─────────────────────────────────────────
-  const adminClient = createClient(supabaseUrl, serviceRoleKey)
+  // ── Fetch order ───────────────────────────────────────────────────────────
   const { data: order, error: fetchError } = await adminClient
     .from('orders')
     .select('id, customer_id, status, payment_result, pricing, points_redeemed')
