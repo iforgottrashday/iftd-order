@@ -8,6 +8,7 @@ export default function SignUpPage() {
   const [form, setForm] = useState({
     email: '',
     password: '',
+    confirmPassword: '',
     firstName: '',
     lastName: '',
     phone: '',
@@ -21,6 +22,12 @@ export default function SignUpPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (form.password !== form.confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
     setLoading(true)
 
     const { data, error: signUpError } = await supabase.auth.signUp({
@@ -151,6 +158,29 @@ export default function SignUpPage() {
             autoComplete="new-password"
             className="w-full border border-[#E0E0E0] rounded-lg px-4 py-3 text-[#1A1A1A] text-base focus:outline-none focus:border-[#1A73E8] bg-white"
           />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="confirmPassword" className="text-sm font-medium text-[#1A1A1A]">
+            Confirm Password
+          </label>
+          <input
+            id="confirmPassword"
+            type="password"
+            value={form.confirmPassword}
+            onChange={update('confirmPassword')}
+            placeholder="Re-enter your password"
+            required
+            autoComplete="new-password"
+            className={`w-full border rounded-lg px-4 py-3 text-[#1A1A1A] text-base focus:outline-none bg-white ${
+              form.confirmPassword && form.confirmPassword !== form.password
+                ? 'border-[#EF4444] focus:border-[#EF4444]'
+                : 'border-[#E0E0E0] focus:border-[#1A73E8]'
+            }`}
+          />
+          {form.confirmPassword && form.confirmPassword !== form.password && (
+            <p className="text-xs text-[#EF4444] font-medium">Passwords do not match</p>
+          )}
         </div>
 
         <button
