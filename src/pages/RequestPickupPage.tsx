@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Minus, Plus, Camera, MapPin, Search, Zap, CalendarDays, Clock, Lock, AlertCircle, X } from 'lucide-react'
-import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, useMapEvents, useMap } from 'react-leaflet'
 
 // Pricing constants
 const ITEM_PRICE         = 20   // $20 per item (all types)
@@ -306,7 +306,7 @@ function AddressSearch({
   )
 }
 
-// ── Map event listener that fires onMove ─────────────────────────────────────
+// ── Internal map helpers (must be children of MapContainer) ──────────────────
 function MapMoveListener({ onMove }: { onMove: (lat: number, lng: number) => void }) {
   useMapEvents({
     moveend(e) {
@@ -317,8 +317,49 @@ function MapMoveListener({ onMove }: { onMove: (lat: number, lng: number) => voi
   return null
 }
 
+function MapFlyTo({ target }: { target: [number, number] | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (target) map.flyTo(target, 17, { duration: 0.8 })
+  }, [target])
+  return null
+}
+
+function MyLocationButton({ onLocate }: { onLocate: (lat: number, lng: number) => void }) {
+  const map = useMap()
+  const [loading, setLoading] = useState(false)
+
+  const handleClick = () => {
+    setLoading(true)
+    navigator.geolocation?.getCurrentPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords
+        map.flyTo([lat, lng], 17, { duration: 0.8 })
+        onLocate(lat, lng)
+        setLoading(false)
+      },
+      () => setLoading(false),
+      { timeout: 8000 },
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="absolute bottom-4 right-4 z-[1000] bg-white border border-[#E0E0E0] rounded-full w-11 h-11 flex items-center justify-center shadow-md text-[#1A73E8]"
+    >
+      {loading ? (
+        <div className="w-5 h-5 border-2 border-[#1A73E8] border-t-transparent rounded-full animate-spin" />
+      ) : (
+        <MapPin size={20} />
+      )}
+    </button>
+  )
+}
+
 // ── Pin Drop Modal ────────────────────────────────────────────────────────────
-const CINCINNATI = { lat: 39.1031, lng: -84.512 }
+const CINCINNATI: [number, number] = [39.1031, -84.512]
 
 function PinDropModal({
   onConfirm,
@@ -327,71 +368,86 @@ function PinDropModal({
   onConfirm: (data: AddressData) => void
   onCancel: () => void
 }) {
-  const [center, setCenter] = useState(CINCINNATI)
-  const [label, setLabel]   = useState('Move the map to your pickup spot')
+  const [initialCenter] = useState<[number, number]>(() => CINCINNATI)
+  const [flyTarget, setFlyTarget]   = useState<[number, number] | null>(null)
+  const [center, setCenter]         = useState({ lat: CINCINNATI[0], lng: CINCINNATI[1] })
+  const [label, setLabel]           = useState('')
   const [geocoding, setGeocoding]   = useState(false)
   const [confirming, setConfirming] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Try to start on the user's actual location
-  useEffect(() => {
-    navigator.geolocation?.getCurrentPosition(
-      (pos) => setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {}, // silently fall back to Cincinnati
-      { timeout: 5000 },
-    )
-  }, [])
+  // Search bar state
+  const [searchQuery, setSearchQuery]   = useState('')
+  const [searchResults, setSearchResults] = useState<NominatimResult[]>([])
+  const [searching, setSearching]         = useState(false)
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const moveDebounceRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const reverseGeocode = async (lat: number, lng: number) => {
     setGeocoding(true)
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`
-      const res = await fetch(url, { headers: { 'Accept-Language': 'en' } })
+      const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } })
       const data = await res.json()
       if (data?.address) {
         const { house_number, road, city, town, village, state, postcode } = data.address
         const street   = [house_number, road].filter(Boolean).join(' ')
         const cityName = city || town || village || ''
-        const full     = [street, cityName, state, postcode].filter(Boolean).join(', ')
-        setLabel(full || data.display_name || 'Unknown location')
+        setLabel([street, cityName, state, postcode].filter(Boolean).join(', ') || data.display_name || '')
       }
-    } catch {
-      setLabel('Unknown location')
-    } finally {
-      setGeocoding(false)
-    }
+    } catch { /* ignore */ }
+    finally { setGeocoding(false) }
   }
 
   const handleMove = (lat: number, lng: number) => {
     setCenter({ lat, lng })
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => reverseGeocode(lat, lng), 700)
+    if (moveDebounceRef.current) clearTimeout(moveDebounceRef.current)
+    moveDebounceRef.current = setTimeout(() => reverseGeocode(lat, lng), 700)
+  }
+
+  const handleSearchChange = (q: string) => {
+    setSearchQuery(q)
+    setSearchResults([])
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    if (q.trim().length < 3) return
+    searchDebounceRef.current = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=4&q=${encodeURIComponent(q)}&countrycodes=us`
+        const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } })
+        setSearchResults(await res.json())
+      } catch { /* ignore */ }
+      finally { setSearching(false) }
+    }, 500)
+  }
+
+  const handleSearchPick = (r: NominatimResult) => {
+    const lat = parseFloat(r.lat)
+    const lng = parseFloat(r.lon)
+    setFlyTarget([lat, lng])
+    setCenter({ lat, lng })
+    setSearchQuery('')
+    setSearchResults([])
+    reverseGeocode(lat, lng)
   }
 
   const handleConfirm = async () => {
     setConfirming(true)
     try {
-      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${center.lat}&lon=${center.lng}&addressdetails=1`
-      const res = await fetch(url, { headers: { 'Accept-Language': 'en' } })
+      const url  = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${center.lat}&lon=${center.lng}&addressdetails=1`
+      const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } })
       const data = await res.json()
       const { county, state } = data?.address ?? {}
       const countyClean = (county ?? '').replace(/ County$| Parish$| Borough$/i, '')
-      onConfirm({
-        address: label,
-        lat: center.lat,
-        lng: center.lng,
-        county: countyClean,
-        state: state ?? '',
-      })
+      onConfirm({ address: label || 'Pinned location', lat: center.lat, lng: center.lng, county: countyClean, state: state ?? '' })
     } catch {
-      onConfirm({ address: label, lat: center.lat, lng: center.lng, county: '', state: '' })
-    } finally {
-      setConfirming(false)
-    }
+      onConfirm({ address: label || 'Pinned location', lat: center.lat, lng: center.lng, county: '', state: '' })
+    } finally { setConfirming(false) }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-white">
+    // z-[9999] so it covers the sticky footer and bottom nav
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-white">
+
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-[#E0E0E0] shrink-0">
         <button type="button" onClick={onCancel} className="p-1 text-[#666666]">
@@ -400,11 +456,42 @@ function PinDropModal({
         <h2 className="font-bold text-[#1A1A1A]">Drop a pin</h2>
       </div>
 
+      {/* Search bar */}
+      <div className="px-3 py-2 border-b border-[#E0E0E0] shrink-0 relative">
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Search for a street or area…"
+            className="w-full border border-[#E0E0E0] rounded-lg pl-8 pr-3 py-2.5 text-sm text-[#1A1A1A] focus:outline-none focus:border-[#1A73E8] bg-white"
+          />
+          {searching && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-[#1A73E8] border-t-transparent rounded-full animate-spin" />
+          )}
+        </div>
+        {searchResults.length > 0 && (
+          <div className="absolute left-3 right-3 top-full mt-1 bg-white border border-[#E0E0E0] rounded-xl shadow-lg z-10 overflow-hidden">
+            {searchResults.map((r) => (
+              <button
+                key={r.place_id}
+                type="button"
+                onClick={() => handleSearchPick(r)}
+                className="w-full text-left px-4 py-3 text-sm text-[#1A1A1A] hover:bg-[#F5F5F5] border-b border-[#E0E0E0] last:border-0"
+              >
+                {r.display_name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Map */}
       <div className="flex-1 relative overflow-hidden">
         <MapContainer
-          center={[center.lat, center.lng]}
-          zoom={17}
+          center={initialCenter}
+          zoom={13}
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}
         >
@@ -413,30 +500,29 @@ function PinDropModal({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           />
           <MapMoveListener onMove={handleMove} />
+          <MapFlyTo target={flyTarget} />
+          <MyLocationButton onLocate={(lat, lng) => { setCenter({ lat, lng }); reverseGeocode(lat, lng) }} />
         </MapContainer>
 
-        {/* Fixed crosshair pin — stays centered, map moves under it */}
+        {/* Crosshair pin — fixed center, map moves under it */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[1000]"
-             style={{ paddingBottom: '28px' }}>
+             style={{ paddingBottom: '24px' }}>
           <div className="flex flex-col items-center drop-shadow-lg">
             <div className="w-5 h-5 rounded-full bg-white border-4 border-[#1A73E8]" />
             <div className="w-0.5 h-5 bg-[#1A73E8]" />
-            <div className="w-2 h-1 bg-[#1A73E8] rounded-full opacity-40" />
+            <div className="w-2 h-0.5 bg-[#1A73E8] rounded-full opacity-40" />
           </div>
         </div>
       </div>
 
       {/* Bottom panel */}
-      <div className="px-4 pt-3 pb-5 border-t border-[#E0E0E0] bg-white shrink-0 flex flex-col gap-3">
-        <div className="flex items-start gap-2 min-h-[36px]">
-          <MapPin size={16} className="text-[#1A73E8] mt-0.5 shrink-0" />
-          <p className="text-sm text-[#1A1A1A] font-medium leading-snug">
-            {geocoding ? 'Finding address…' : label}
+      <div className="px-4 pt-3 pb-5 border-t border-[#E0E0E0] bg-white shrink-0 flex flex-col gap-2">
+        <div className="flex items-center gap-2 min-h-[24px]">
+          <MapPin size={14} className="text-[#1A73E8] shrink-0" />
+          <p className="text-sm text-[#1A1A1A] font-medium truncate">
+            {geocoding ? 'Finding address…' : (label || 'Pan the map to your pickup spot')}
           </p>
         </div>
-        <p className="text-xs text-[#666666] -mt-1">
-          Move the map to place the pin at your exact pickup spot
-        </p>
         <button
           type="button"
           onClick={handleConfirm}
