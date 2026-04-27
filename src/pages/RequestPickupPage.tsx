@@ -1021,9 +1021,10 @@ export default function RequestPickupPage() {
         <button
           type="button"
           onClick={() => setShowPinDrop(true)}
-          className="text-sm text-[#1A73E8] font-medium text-left px-1"
+          className="flex items-center gap-2 border border-[#1A73E8] rounded-lg px-4 py-3 text-sm text-[#1A73E8] font-semibold bg-white w-full"
         >
-          📍 New construction or can't find your address? Drop a pin instead
+          <MapPin size={16} className="shrink-0" />
+          New construction or can't find your address? Drop a pin
         </button>
       </section>
 
