@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { Minus, Plus, Camera, MapPin, Search, Zap, CalendarDays, Clock, Lock, AlertCircle } from 'lucide-react'
+import { Minus, Plus, Camera, MapPin, Search, Zap, CalendarDays, Clock, Lock, AlertCircle, X } from 'lucide-react'
+import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
 
 // Pricing constants
 const ITEM_PRICE         = 20   // $20 per item (all types)
@@ -305,6 +306,150 @@ function AddressSearch({
   )
 }
 
+// ── Map event listener that fires onMove ─────────────────────────────────────
+function MapMoveListener({ onMove }: { onMove: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    moveend(e) {
+      const { lat, lng } = e.target.getCenter()
+      onMove(lat, lng)
+    },
+  })
+  return null
+}
+
+// ── Pin Drop Modal ────────────────────────────────────────────────────────────
+const CINCINNATI = { lat: 39.1031, lng: -84.512 }
+
+function PinDropModal({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: (data: AddressData) => void
+  onCancel: () => void
+}) {
+  const [center, setCenter] = useState(CINCINNATI)
+  const [label, setLabel]   = useState('Move the map to your pickup spot')
+  const [geocoding, setGeocoding]   = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Try to start on the user's actual location
+  useEffect(() => {
+    navigator.geolocation?.getCurrentPosition(
+      (pos) => setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {}, // silently fall back to Cincinnati
+      { timeout: 5000 },
+    )
+  }, [])
+
+  const reverseGeocode = async (lat: number, lng: number) => {
+    setGeocoding(true)
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`
+      const res = await fetch(url, { headers: { 'Accept-Language': 'en' } })
+      const data = await res.json()
+      if (data?.address) {
+        const { house_number, road, city, town, village, state, postcode } = data.address
+        const street   = [house_number, road].filter(Boolean).join(' ')
+        const cityName = city || town || village || ''
+        const full     = [street, cityName, state, postcode].filter(Boolean).join(', ')
+        setLabel(full || data.display_name || 'Unknown location')
+      }
+    } catch {
+      setLabel('Unknown location')
+    } finally {
+      setGeocoding(false)
+    }
+  }
+
+  const handleMove = (lat: number, lng: number) => {
+    setCenter({ lat, lng })
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => reverseGeocode(lat, lng), 700)
+  }
+
+  const handleConfirm = async () => {
+    setConfirming(true)
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${center.lat}&lon=${center.lng}&addressdetails=1`
+      const res = await fetch(url, { headers: { 'Accept-Language': 'en' } })
+      const data = await res.json()
+      const { county, state } = data?.address ?? {}
+      const countyClean = (county ?? '').replace(/ County$| Parish$| Borough$/i, '')
+      onConfirm({
+        address: label,
+        lat: center.lat,
+        lng: center.lng,
+        county: countyClean,
+        state: state ?? '',
+      })
+    } catch {
+      onConfirm({ address: label, lat: center.lat, lng: center.lng, county: '', state: '' })
+    } finally {
+      setConfirming(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-white">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#E0E0E0] shrink-0">
+        <button type="button" onClick={onCancel} className="p-1 text-[#666666]">
+          <X size={20} />
+        </button>
+        <h2 className="font-bold text-[#1A1A1A]">Drop a pin</h2>
+      </div>
+
+      {/* Map */}
+      <div className="flex-1 relative overflow-hidden">
+        <MapContainer
+          center={[center.lat, center.lng]}
+          zoom={17}
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={false}
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          />
+          <MapMoveListener onMove={handleMove} />
+        </MapContainer>
+
+        {/* Fixed crosshair pin — stays centered, map moves under it */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[1000]"
+             style={{ paddingBottom: '28px' }}>
+          <div className="flex flex-col items-center drop-shadow-lg">
+            <div className="w-5 h-5 rounded-full bg-white border-4 border-[#1A73E8]" />
+            <div className="w-0.5 h-5 bg-[#1A73E8]" />
+            <div className="w-2 h-1 bg-[#1A73E8] rounded-full opacity-40" />
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom panel */}
+      <div className="px-4 pt-3 pb-5 border-t border-[#E0E0E0] bg-white shrink-0 flex flex-col gap-3">
+        <div className="flex items-start gap-2 min-h-[36px]">
+          <MapPin size={16} className="text-[#1A73E8] mt-0.5 shrink-0" />
+          <p className="text-sm text-[#1A1A1A] font-medium leading-snug">
+            {geocoding ? 'Finding address…' : label}
+          </p>
+        </div>
+        <p className="text-xs text-[#666666] -mt-1">
+          Move the map to place the pin at your exact pickup spot
+        </p>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={confirming || geocoding}
+          className="w-full bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-60"
+        >
+          {confirming ? 'Confirming…' : 'Confirm Location'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function RequestPickupPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -355,6 +500,7 @@ export default function RequestPickupPage() {
   const [notes, setNotes] = useState(() => restore?.notes ?? '')
   const [privateNotes, setPrivateNotes] = useState(() => restore?.privateNotes ?? '')
   const [photoFile, setPhotoFile] = useState<File | null>(() => restore?.photoFile ?? null)
+  const [showPinDrop, setShowPinDrop] = useState(false)
   const [photoPreview, setPhotoPreview] = useState<string | null>(() => {
     if (!restore?.photoFile) return null
     try { return URL.createObjectURL(restore.photoFile) } catch { return null }
@@ -772,11 +918,30 @@ export default function RequestPickupPage() {
       {/* Step 5: Address */}
       <section className="flex flex-col gap-3">
         <h2 className="text-base font-bold text-[#1A1A1A]">Step 5: Pickup location</h2>
-        <AddressSearch initial={homeAddress} onSelect={setAddressData} />
+        <AddressSearch initial={homeAddress} onSelect={(data) => { setAddressData(data); setHomeAddress(data.address) }} />
         {addressData && !addressData.lat && addressData.address && (
           <p className="text-xs text-[#F59E0B] px-1">Search and select your address to confirm location for pickup routing.</p>
         )}
+        <button
+          type="button"
+          onClick={() => setShowPinDrop(true)}
+          className="text-sm text-[#1A73E8] font-medium text-left px-1"
+        >
+          📍 New construction or can't find your address? Drop a pin instead
+        </button>
       </section>
+
+      {/* Pin drop modal */}
+      {showPinDrop && (
+        <PinDropModal
+          onConfirm={(data) => {
+            setAddressData(data)
+            setHomeAddress(data.address)
+            setShowPinDrop(false)
+          }}
+          onCancel={() => setShowPinDrop(false)}
+        />
+      )}
 
       {/* Sticky footer */}
       <div className="fixed bottom-[52px] left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 flex items-center justify-between gap-4 z-50">
