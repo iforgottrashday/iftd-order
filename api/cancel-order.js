@@ -35,7 +35,7 @@ export default async function handler(req, res) {
   const adminClient = createClient(supabaseUrl, serviceRoleKey)
   const { data: order, error: fetchError } = await adminClient
     .from('orders')
-    .select('id, customer_id, status, payment_result')
+    .select('id, customer_id, status, payment_result, pricing, points_redeemed')
     .eq('id', orderId)
     .single()
 
@@ -53,20 +53,21 @@ export default async function handler(req, res) {
     })
   }
 
-  // ── Process Stripe refund if real payment ─────────────────────────────────
+  // ── Process Stripe refund if real card payment ────────────────────────────
   const paymentIntentId = order.payment_result?.transactionId
   let refundId = null
+  const isPointsRedemption = !paymentIntentId ||
+    paymentIntentId === 'points_redemption' ||
+    paymentIntentId.toLowerCase().startsWith('mock')
 
-  if (paymentIntentId && stripeKey &&
-      !paymentIntentId.toLowerCase().startsWith('mock') &&
-      !paymentIntentId.toLowerCase().startsWith('mock-')) {
+  if (!isPointsRedemption && stripeKey) {
     try {
       const stripe = new Stripe(stripeKey)
       const refund = await stripe.refunds.create({ payment_intent: paymentIntentId })
       refundId = refund.id
     } catch (stripeErr) {
       console.error('Stripe refund failed:', stripeErr.message)
-      // Still cancel the order — admin can process refund manually in Stripe
+      // Still cancel — admin can process manually in Stripe dashboard
     }
   }
 
@@ -84,5 +85,24 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: `Failed to cancel order: ${updateError.message}` })
   }
 
-  return res.status(200).json({ ok: true, refundId })
+  // ── Restore reward points if the order was paid with points ───────────────
+  const pointsToRestore = order.pricing?.pointsRedeemed ?? order.points_redeemed ?? 0
+  let pointsRestored = 0
+  if (pointsToRestore > 0) {
+    const { data: profile } = await adminClient
+      .from('profiles')
+      .select('points_balance')
+      .eq('id', order.customer_id)
+      .single()
+
+    if (profile) {
+      await adminClient
+        .from('profiles')
+        .update({ points_balance: (profile.points_balance ?? 0) + pointsToRestore })
+        .eq('id', order.customer_id)
+      pointsRestored = pointsToRestore
+    }
+  }
+
+  return res.status(200).json({ ok: true, refundId, pointsRestored })
 }
