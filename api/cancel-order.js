@@ -14,6 +14,7 @@ export default async function handler(req, res) {
   const stripeKey = process.env.STRIPE_SECRET_KEY
 
   if (!supabaseUrl || !serviceRoleKey) {
+    console.error('[cancel-order] Missing env vars — supabaseUrl:', !!supabaseUrl, 'serviceRoleKey:', !!serviceRoleKey)
     return res.status(500).json({ error: 'Server configuration error.' })
   }
 
@@ -22,9 +23,17 @@ export default async function handler(req, res) {
   if (!authHeader) return res.status(401).json({ error: 'Not authenticated.' })
 
   const token = authHeader.replace(/^Bearer\s+/i, '').trim()
+
+  // Use anon key for token verification (service role is for data ops only)
+  const anonKey = supabaseAnonKey || serviceRoleKey  // fallback in case anon key not set
+  const authClient = createClient(supabaseUrl, anonKey)
+  const { data: { user }, error: authError } = await authClient.auth.getUser(token)
+  if (authError || !user) {
+    console.error('[cancel-order] Auth failed:', authError?.message, '| token length:', token?.length)
+    return res.status(401).json({ error: 'Invalid session.' })
+  }
+
   const adminClient = createClient(supabaseUrl, serviceRoleKey)
-  const { data: { user }, error: authError } = await adminClient.auth.getUser(token)
-  if (authError || !user) return res.status(401).json({ error: 'Invalid session.' })
 
   // ── Validate input ────────────────────────────────────────────────────────
   const { orderId } = req.body || {}
