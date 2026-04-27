@@ -1,34 +1,40 @@
-import { Loader } from '@googlemaps/js-api-loader'
+import { setOptions, importLibrary } from '@googlemaps/js-api-loader'
 
-let _initPromise: Promise<void> | null = null
+const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined
+
+let _optionsSet = false
+let _promise: Promise<void> | null = null
 
 /**
- * Loads the Google Maps JavaScript API (places library) once.
- * Subsequent calls return the same promise.
+ * Loads the Google Maps JavaScript API (maps + places + geocoding).
+ * Safe to call multiple times — returns the same promise after the first call.
  */
 export function initGoogleMaps(): Promise<void> {
-  if (_initPromise) return _initPromise
+  if (_promise) return _promise
 
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined
-  if (!apiKey) {
+  if (!API_KEY) {
     console.error('[Google Maps] VITE_GOOGLE_MAPS_API_KEY is not set')
     return Promise.reject(new Error('Google Maps API key not configured'))
   }
 
-  const loader = new Loader({
-    apiKey,
-    version: 'weekly',
-    libraries: ['places'],
-  })
+  if (!_optionsSet) {
+    setOptions({ key: API_KEY, v: 'weekly' })
+    _optionsSet = true
+  }
 
-  _initPromise = loader.load().then(() => undefined)
-  return _initPromise
+  _promise = Promise.all([
+    importLibrary('maps'),
+    importLibrary('places'),
+    importLibrary('geocoding'),
+  ]).then(() => undefined)
+
+  return _promise
 }
 
 export interface AddressComponents {
   formattedAddress: string
   county: string   // e.g. "Hamilton"
-  state: string    // short: "OH"
+  state: string    // short code: "OH"
 }
 
 /** Extract structured fields from a Google address_components array */

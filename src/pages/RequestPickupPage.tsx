@@ -224,12 +224,12 @@ function AddressSearch({
       setSearching(true)
       try {
         await initGoogleMaps()
-        const svc = new window.google.maps.places.AutocompleteService()
+        const svc = new google.maps.places.AutocompleteService()
         svc.getPlacePredictions(
           { input: q, componentRestrictions: { country: 'us' }, types: ['address'] },
           (predictions, status) => {
             setSearching(false)
-            if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+            if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
               setResults(predictions.map(p => ({ place_id: p.place_id, description: p.description })))
             } else {
               setResults([])
@@ -248,12 +248,12 @@ function AddressSearch({
     setSearching(true)
     try {
       await initGoogleMaps()
-      const svc = new window.google.maps.places.PlacesService(document.createElement('div'))
+      const svc = new google.maps.places.PlacesService(document.createElement('div'))
       svc.getDetails(
         { placeId: suggestion.place_id, fields: ['geometry', 'address_components', 'formatted_address'] },
         (place, status) => {
           setSearching(false)
-          if (status === window.google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
+          if (status === google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
             const lat = place.geometry.location.lat()
             const lng = place.geometry.location.lng()
             const { formattedAddress, county, state } = parseAddressComponents(
@@ -395,7 +395,7 @@ function PinDropModal({
     setGeocoding(true)
     try {
       await initGoogleMaps()
-      const geocoder = new window.google.maps.Geocoder()
+      const geocoder = new google.maps.Geocoder()
       const result   = await geocoder.geocode({ location: { lat, lng } })
       if (result.results.length > 0) {
         const r = result.results[0]
@@ -422,12 +422,12 @@ function PinDropModal({
       setSearching(true)
       try {
         await initGoogleMaps()
-        const svc = new window.google.maps.places.AutocompleteService()
+        const svc = new google.maps.places.AutocompleteService()
         svc.getPlacePredictions(
           { input: q, componentRestrictions: { country: 'us' }, types: ['address'] },
           (predictions, status) => {
             setSearching(false)
-            if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+            if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
               const suggestions = predictions.map(p => ({ place_id: p.place_id, description: p.description }))
               setSearchResults(suggestions)
               // Auto-fly to first result
@@ -449,11 +449,11 @@ function PinDropModal({
       setSearchResults([])
     }
     initGoogleMaps().then(() => {
-      const svc = new window.google.maps.places.PlacesService(document.createElement('div'))
+      const svc = new google.maps.places.PlacesService(document.createElement('div'))
       svc.getDetails(
         { placeId: suggestion.place_id, fields: ['geometry', 'address_components', 'formatted_address'] },
         (place, status) => {
-          if (status === window.google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
+          if (status === google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
             const lat = place.geometry.location.lat()
             const lng = place.geometry.location.lng()
             setFlyTarget([lat, lng])
@@ -712,7 +712,7 @@ export default function RequestPickupPage() {
     if (!finalAddressData.lat || !finalAddressData.lng) {
       try {
         await initGoogleMaps()
-        const geocoder = new window.google.maps.Geocoder()
+        const geocoder = new google.maps.Geocoder()
         const result = await geocoder.geocode({ address: finalAddressData.address })
         if (result.results.length > 0) {
           const r = result.results[0]
