@@ -312,12 +312,19 @@ function AddressSearch({
 
 // ── Internal map helpers (must be children of MapContainer) ──────────────────
 
-// Forces Leaflet to recalculate tile layout after the modal fully renders
+// Forces Leaflet to recalculate tile layout after the modal renders and after each fly animation
 function MapResizer() {
   const map = useMap()
   useEffect(() => {
-    const t = setTimeout(() => map.invalidateSize(), 50)
-    return () => clearTimeout(t)
+    const t1 = setTimeout(() => map.invalidateSize(), 0)
+    const t2 = setTimeout(() => map.invalidateSize(), 200)
+    const onMoveEnd = () => map.invalidateSize()
+    map.on('moveend', onMoveEnd)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+      map.off('moveend', onMoveEnd)
+    }
   }, [map])
   return null
 }
@@ -335,7 +342,7 @@ function MapMoveListener({ onMove }: { onMove: (lat: number, lng: number) => voi
 function MapFlyTo({ target }: { target: [number, number] | null }) {
   const map = useMap()
   useEffect(() => {
-    if (target) map.flyTo(target, 19, { duration: 0.8 })
+    if (target) map.flyTo(target, 17, { duration: 0.8 })
   }, [target])
   return null
 }
