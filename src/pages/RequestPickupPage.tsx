@@ -311,6 +311,17 @@ function AddressSearch({
 }
 
 // ── Internal map helpers (must be children of MapContainer) ──────────────────
+
+// Forces Leaflet to recalculate tile layout after the modal fully renders
+function MapResizer() {
+  const map = useMap()
+  useEffect(() => {
+    const t = setTimeout(() => map.invalidateSize(), 50)
+    return () => clearTimeout(t)
+  }, [map])
+  return null
+}
+
 function MapMoveListener({ onMove }: { onMove: (lat: number, lng: number) => void }) {
   useMapEvents({
     moveend(e) {
@@ -535,6 +546,7 @@ function PinDropModal({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           />
+          <MapResizer />
           <MapMoveListener onMove={handleMove} />
           <MapFlyTo target={flyTarget} />
           <MyLocationButton onLocate={(lat, lng) => { setCenter({ lat, lng }); reverseGeocode(lat, lng) }} />
