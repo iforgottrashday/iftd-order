@@ -18,7 +18,7 @@ export default function BottomNav() {
       <div className="flex">
         {TABS.map(({ to, label, Icon, requiresAuth }) => {
           const active = pathname === to || (to !== '/' && pathname.startsWith(to))
-          const dest = requiresAuth && !user ? '/sign-in' : to
+          const dest = requiresAuth && (!user || user.is_anonymous) ? '/sign-in' : to
           return (
             <Link
               key={to}

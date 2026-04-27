@@ -18,7 +18,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     )
   }
 
-  if (!session) {
+  if (!session || session.user.is_anonymous) {
     return <Navigate to="/sign-in" state={{ from: location }} replace />
   }
 
