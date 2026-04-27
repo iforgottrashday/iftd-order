@@ -30,7 +30,7 @@ export default function SignUpPage() {
 
     setLoading(true)
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
+    const { error: signUpError } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
       options: {
@@ -38,6 +38,7 @@ export default function SignUpPage() {
           full_name: `${form.firstName} ${form.lastName}`.trim(),
           first_name: form.firstName,
           last_name: form.lastName,
+          phone: form.phone || null,
         },
       },
     })
@@ -48,21 +49,8 @@ export default function SignUpPage() {
       return
     }
 
-    const userId = data.user?.id
-    if (userId) {
-      const { error: profileError } = await supabase.from('profiles').upsert({
-        id: userId,
-        first_name: form.firstName,
-        last_name: form.lastName,
-        phone: form.phone || null,
-        account_type: 'customer',
-      }, { onConflict: 'id' })
-
-      if (profileError) {
-        // Profile row may already exist from trigger — not fatal
-        console.warn('Profile insert warning:', profileError.message)
-      }
-    }
+    // Profile row is created by the handle_new_user() trigger using the
+    // metadata above — no client-side insert needed.
 
     navigate('/request', { replace: true })
   }
