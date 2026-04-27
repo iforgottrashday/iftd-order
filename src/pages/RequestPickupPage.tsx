@@ -413,11 +413,21 @@ function PinDropModal({
       setSearching(true)
       try {
         const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=4&q=${encodeURIComponent(q)}&countrycodes=us`
-        const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } })
-        setSearchResults(await res.json())
+        const res     = await fetch(url, { headers: { 'Accept-Language': 'en' } })
+        const results: NominatimResult[] = await res.json()
+        setSearchResults(results)
+        // Auto-fly to the first result so user doesn't have to click
+        if (results.length > 0) {
+          const first = results[0]
+          const lat = parseFloat(first.lat)
+          const lng = parseFloat(first.lon)
+          setFlyTarget([lat, lng])
+          setCenter({ lat, lng })
+          reverseGeocode(lat, lng)
+        }
       } catch { /* ignore */ }
       finally { setSearching(false) }
-    }, 500)
+    }, 600)
   }
 
   const handleSearchPick = (r: NominatimResult) => {
@@ -472,7 +482,7 @@ function PinDropModal({
           )}
         </div>
         {searchResults.length > 0 && (
-          <div className="absolute left-3 right-3 top-full mt-1 bg-white border border-[#E0E0E0] rounded-xl shadow-lg z-10 overflow-hidden">
+          <div className="absolute left-3 right-3 top-full mt-1 bg-white border border-[#E0E0E0] rounded-xl shadow-lg z-[9999] overflow-hidden">
             {searchResults.map((r) => (
               <button
                 key={r.place_id}
