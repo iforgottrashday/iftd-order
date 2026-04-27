@@ -320,7 +320,7 @@ function MapMoveListener({ onMove }: { onMove: (lat: number, lng: number) => voi
 function MapFlyTo({ target }: { target: [number, number] | null }) {
   const map = useMap()
   useEffect(() => {
-    if (target) map.flyTo(target, 17, { duration: 0.8 })
+    if (target) map.flyTo(target, 19, { duration: 0.8 })
   }, [target])
   return null
 }
@@ -416,7 +416,8 @@ function PinDropModal({
         const res     = await fetch(url, { headers: { 'Accept-Language': 'en' } })
         const results: NominatimResult[] = await res.json()
         setSearchResults(results)
-        // Auto-fly to the first result so user doesn't have to click
+        // Auto-fly to the first result so user doesn't have to click.
+        // Zoom to 19 (individual house level) so they can fine-tune easily.
         if (results.length > 0) {
           const first = results[0]
           const lat = parseFloat(first.lat)
@@ -527,11 +528,18 @@ function PinDropModal({
 
       {/* Bottom panel */}
       <div className="px-4 pt-3 pb-5 border-t border-[#E0E0E0] bg-white shrink-0 flex flex-col gap-2">
-        <div className="flex items-center gap-2 min-h-[24px]">
-          <MapPin size={14} className="text-[#1A73E8] shrink-0" />
-          <p className="text-sm text-[#1A1A1A] font-medium truncate">
-            {geocoding ? 'Finding address…' : (label || 'Pan the map to your pickup spot')}
-          </p>
+        <div className="flex items-start gap-2 min-h-[24px]">
+          <MapPin size={14} className="text-[#1A73E8] shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-[#1A1A1A] font-medium">
+              {geocoding ? 'Finding address…' : (label || 'Pan the map to your pickup spot')}
+            </p>
+            {label && !geocoding && (
+              <p className="text-xs text-[#F59E0B] mt-0.5">
+                ⚠️ Not quite right? Pan the map until the pin is over your exact driveway or gate.
+              </p>
+            )}
+          </div>
         </div>
         <button
           type="button"
