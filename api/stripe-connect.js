@@ -70,25 +70,30 @@ export default async function handler(req, res) {
   // ── action: account_status ────────────────────────────────────────────────────
 
   if (action === 'account_status') {
-    const storedId  = await getStoredAccountId()
-    const accountId = await verifyOrClearAccount(storedId)
+    try {
+      const storedId  = await getStoredAccountId()
+      const accountId = await verifyOrClearAccount(storedId)
 
-    if (!accountId) {
-      return res.status(200).json({ status: 'not_started' })
+      if (!accountId) {
+        return res.status(200).json({ status: 'not_started' })
+      }
+
+      const account = await stripe.accounts.retrieve(accountId)
+      const isActive =
+        account.details_submitted &&
+        account.charges_enabled   &&
+        account.payouts_enabled
+      return res.status(200).json({
+        status:           isActive ? 'active' : 'pending',
+        accountId,
+        detailsSubmitted: account.details_submitted,
+        chargesEnabled:   account.charges_enabled,
+        payoutsEnabled:   account.payouts_enabled,
+      })
+    } catch (err) {
+      console.error('[stripe-connect] account_status error:', err)
+      return res.status(500).json({ error: err?.message ?? 'Could not retrieve account status.' })
     }
-
-    const account = await stripe.accounts.retrieve(accountId)
-    const isActive =
-      account.details_submitted &&
-      account.charges_enabled   &&
-      account.payouts_enabled
-    return res.status(200).json({
-      status:           isActive ? 'active' : 'pending',
-      accountId,
-      detailsSubmitted: account.details_submitted,
-      chargesEnabled:   account.charges_enabled,
-      payoutsEnabled:   account.payouts_enabled,
-    })
   }
 
   // ── action: create_account (start or continue onboarding) ────────────────────
@@ -98,28 +103,33 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'return_url and refresh_url are required.' })
     }
 
-    // Verify or create a Stripe Express account
-    let accountId = await getStoredAccountId()
-    accountId = await verifyOrClearAccount(accountId)
+    try {
+      // Verify or create a Stripe Express account
+      let accountId = await getStoredAccountId()
+      accountId = await verifyOrClearAccount(accountId)
 
-    if (!accountId) {
-      const account = await stripe.accounts.create({
-        type: 'express',
-        metadata: { hauler_id },
+      if (!accountId) {
+        const account = await stripe.accounts.create({
+          type: 'express',
+          metadata: { hauler_id },
+        })
+        accountId = account.id
+        await saveAccountId(accountId)
+      }
+
+      // Generate the hosted onboarding link
+      const accountLink = await stripe.accountLinks.create({
+        account:     accountId,
+        return_url,
+        refresh_url,
+        type:        'account_onboarding',
       })
-      accountId = account.id
-      await saveAccountId(accountId)
+
+      return res.status(200).json({ url: accountLink.url })
+    } catch (err) {
+      console.error('[stripe-connect] create_account error:', err)
+      return res.status(500).json({ error: err?.message ?? 'Could not create Stripe Connect account.' })
     }
-
-    // Generate the hosted onboarding link
-    const accountLink = await stripe.accountLinks.create({
-      account:     accountId,
-      return_url,
-      refresh_url,
-      type:        'account_onboarding',
-    })
-
-    return res.status(200).json({ url: accountLink.url })
   }
 
   return res.status(400).json({ error: `Unknown action: ${action}` })
