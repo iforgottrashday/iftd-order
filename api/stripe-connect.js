@@ -83,6 +83,17 @@ export default async function handler(req, res) {
         account.details_submitted &&
         account.charges_enabled   &&
         account.payouts_enabled
+
+      // Keep stripe_connect_onboarded in sync so the admin panel knows
+      // this hauler is ready for Stripe payouts without a separate API call.
+      if (isActive) {
+        await adminClient
+          .from('hauler_profiles')
+          .update({ stripe_connect_onboarded: true })
+          .eq('profile_id', hauler_id)
+          .eq('stripe_connect_onboarded', false) // no-op if already true
+      }
+
       return res.status(200).json({
         status:           isActive ? 'active' : 'pending',
         accountId,
@@ -129,6 +140,47 @@ export default async function handler(req, res) {
     } catch (err) {
       console.error('[stripe-connect] create_account error:', err)
       return res.status(500).json({ error: err?.message ?? 'Could not create Stripe Connect account.' })
+    }
+  }
+
+  // ── action: payout (admin-triggered Stripe transfer to hauler) ───────────────
+
+  if (action === 'payout') {
+    const { amount, earning_ids, payout_db_id } = req.body || {}
+    if (!amount || !Array.isArray(earning_ids) || earning_ids.length === 0) {
+      return res.status(400).json({ error: 'amount and earning_ids are required.' })
+    }
+
+    try {
+      const storedId  = await getStoredAccountId()
+      const accountId = await verifyOrClearAccount(storedId)
+
+      if (!accountId) {
+        return res.status(400).json({ error: 'Hauler has not connected a Stripe account yet.' })
+      }
+
+      // Confirm the account is fully onboarded before attempting a transfer
+      const account = await stripe.accounts.retrieve(accountId)
+      if (!account.details_submitted || !account.charges_enabled || !account.payouts_enabled) {
+        return res.status(400).json({ error: 'Hauler Stripe account is not fully onboarded. They must complete their bank setup first.' })
+      }
+
+      const transfer = await stripe.transfers.create({
+        amount:      Math.round(amount * 100), // dollars → cents
+        currency:    'usd',
+        destination: accountId,
+        metadata: {
+          hauler_id,
+          payout_db_id: payout_db_id ?? '',
+          earning_ids:  JSON.stringify(earning_ids),
+        },
+      })
+
+      console.log(`[stripe-connect] Transfer ${transfer.id} → ${accountId} for $${amount}`)
+      return res.status(200).json({ transferId: transfer.id })
+    } catch (err) {
+      console.error('[stripe-connect] payout error:', err)
+      return res.status(500).json({ error: err?.message ?? 'Stripe transfer failed.' })
     }
   }
 
