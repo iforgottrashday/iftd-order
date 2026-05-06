@@ -33,8 +33,10 @@ export function initGoogleMaps(): Promise<void> {
 
 export interface AddressComponents {
   formattedAddress: string
-  county: string   // e.g. "Hamilton"
-  state: string    // short code: "OH"
+  city:     string    // e.g. "Cincinnati", "Norwood" — locality name
+  township: string    // e.g. "Anderson Township" — admin level 3, often blank
+  county:   string    // e.g. "Hamilton"
+  state:    string    // short code: "OH"
 }
 
 /** Extract structured fields from a Google address_components array */
@@ -45,9 +47,13 @@ export function parseAddressComponents(
   const get = (type: string, short = false) =>
     components.find(c => c.types.includes(type))?.[short ? 'short_name' : 'long_name'] ?? ''
 
+  const city      = get('locality')
+  // administrative_area_level_3 is occasionally a city, more often a township.
+  // We keep it separate so the coverage matcher can try it as a fallback.
+  const township  = get('administrative_area_level_3')
   const countyRaw = get('administrative_area_level_2')
   const county    = countyRaw.replace(/ County$| Parish$| Borough$/i, '')
   const state     = get('administrative_area_level_1', true) // "OH"
 
-  return { formattedAddress: formatted, county, state }
+  return { formattedAddress: formatted, city, township, county, state }
 }

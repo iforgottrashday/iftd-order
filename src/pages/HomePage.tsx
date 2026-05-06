@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Trash2, Package, ArrowRight } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
+import CoverageCheck from '@/components/CoverageCheck'
 
 export default function HomePage() {
   const { user } = useAuth()
@@ -56,6 +57,9 @@ export default function HomePage() {
           <ArrowRight size={20} />
         </Link>
       </div>
+
+      {/* Pre-flight coverage check — public, no login required */}
+      <CoverageCheck />
 
       {/* Quick actions */}
       <div className="flex flex-col gap-3">

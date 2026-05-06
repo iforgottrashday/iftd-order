@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { initGoogleMaps, parseAddressComponents } from '@/lib/googleMaps'
-import { Minus, Plus, Camera, MapPin, Search, Zap, CalendarDays, Clock, Lock, AlertCircle, X } from 'lucide-react'
+import { checkCoverage } from '@/lib/coverage'
+import { Minus, Plus, Camera, MapPin, Search, Zap, CalendarDays, Clock, Lock, AlertCircle, X, XCircle } from 'lucide-react'
 import { MapContainer, TileLayer, useMapEvents, useMap } from 'react-leaflet'
 
 // Pricing constants
@@ -116,6 +117,8 @@ interface AddressData {
   address: string
   lat: number | null
   lng: number | null
+  city:     string
+  township: string
   county: string
   state: string
 }
@@ -256,13 +259,13 @@ function AddressSearch({
           if (status === google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
             const lat = place.geometry.location.lat()
             const lng = place.geometry.location.lng()
-            const { formattedAddress, county, state } = parseAddressComponents(
+            const { formattedAddress, city, township, county, state } = parseAddressComponents(
               place.address_components ?? [],
               place.formatted_address ?? suggestion.description,
             )
             setQuery(formattedAddress)
             setConfirmed(true)
-            onSelect({ address: formattedAddress, lat, lng, county, state })
+            onSelect({ address: formattedAddress, lat, lng, city, township, county, state })
           }
         },
       )
@@ -396,8 +399,9 @@ function PinDropModal({
   const [label, setLabel]           = useState('')
   const [geocoding, setGeocoding]   = useState(false)
   const [confirming, setConfirming] = useState(false)
-  // County/state stored during reverse geocode so confirm doesn't need another API call
-  const [countyState, setCountyState] = useState({ county: '', state: '' })
+  // City/township/county/state captured during reverse geocode so confirm
+  // doesn't need another API call AND so coverage check can run immediately.
+  const [addrParts, setAddrParts] = useState({ city: '', township: '', county: '', state: '' })
 
   // Search bar state
   const [searchQuery,   setSearchQuery]   = useState('')
@@ -418,8 +422,8 @@ function PinDropModal({
       if (result.results.length > 0) {
         const r = result.results[0]
         setLabel(r.formatted_address)
-        const { county, state } = parseAddressComponents(r.address_components, r.formatted_address)
-        setCountyState({ county, state })
+        const { city, township, county, state } = parseAddressComponents(r.address_components, r.formatted_address)
+        setAddrParts({ city, township, county, state })
       }
     } catch { /* ignore */ }
     finally { setGeocoding(false) }
@@ -478,8 +482,8 @@ function PinDropModal({
             setCenter({ lat, lng })
             const formatted = place.formatted_address ?? suggestion.description
             setLabel(formatted)
-            const { county, state } = parseAddressComponents(place.address_components ?? [], formatted)
-            setCountyState({ county, state })
+            const { city, township, county, state } = parseAddressComponents(place.address_components ?? [], formatted)
+            setAddrParts({ city, township, county, state })
           }
         },
       )
@@ -489,11 +493,13 @@ function PinDropModal({
   const handleConfirm = () => {
     setConfirming(true)
     onConfirm({
-      address: label || 'Pinned location',
-      lat: center.lat,
-      lng: center.lng,
-      county: countyState.county,
-      state: countyState.state,
+      address:  label || 'Pinned location',
+      lat:      center.lat,
+      lng:      center.lng,
+      city:     addrParts.city,
+      township: addrParts.township,
+      county:   addrParts.county,
+      state:    addrParts.state,
     })
     setConfirming(false)
   }
@@ -620,12 +626,36 @@ export default function RequestPickupPage() {
         address: restore.address,
         lat: restore.latitude,
         lng: restore.longitude,
+        city: '',         // not preserved across restore — will be re-resolved if needed
+        township: '',
         county: restore.location_county,
         state: restore.location_state,
       }
     }
     return null
   })
+
+  // Coverage check — runs whenever the resolved address changes. We hold the
+  // result here and use it to gate the submit button further down.
+  const [coverage, setCoverage] = useState<Awaited<ReturnType<typeof checkCoverage>> | null>(null)
+  const [checkingCoverage, setCheckingCoverage] = useState(false)
+  useEffect(() => {
+    if (!addressData?.county || !addressData?.state) { setCoverage(null); return }
+    let cancelled = false
+    setCheckingCoverage(true)
+    checkCoverage({
+      formattedAddress: addressData.address,
+      city:     addressData.city,
+      township: addressData.township,
+      county:   addressData.county,
+      state:    addressData.state,
+    }).then(result => {
+      if (!cancelled) setCoverage(result)
+    }).finally(() => {
+      if (!cancelled) setCheckingCoverage(false)
+    })
+    return () => { cancelled = true }
+  }, [addressData?.address, addressData?.county, addressData?.state, addressData?.city, addressData?.township])
   const [homeAddress, setHomeAddress] = useState(() => restore?.address ?? '')
   const [trashQty, setTrashQty] = useState(() =>
     restore?.items?.find(i => i.product_id === 'trash')?.quantity ?? 0
@@ -669,8 +699,10 @@ export default function RequestPickupPage() {
           address: data.home_address,
           lat: data.home_lat ? Number(data.home_lat) : null,
           lng: data.home_lng ? Number(data.home_lng) : null,
-          county: data.county ?? '',
-          state: data.state ?? '',
+          city:     data.city ?? '',
+          township: '',
+          county:   data.county ?? '',
+          state:    data.state ?? '',
         })
       })
   }, [user])
@@ -737,13 +769,15 @@ export default function RequestPickupPage() {
           const r = result.results[0]
           const lat = r.geometry.location.lat()
           const lng = r.geometry.location.lng()
-          const { county, state: st } = parseAddressComponents(r.address_components, r.formatted_address)
+          const { city: ct, township: tw, county, state: st } = parseAddressComponents(r.address_components, r.formatted_address)
           finalAddressData = {
-            address: finalAddressData.address,
+            address:  finalAddressData.address,
             lat,
             lng,
-            county: county || finalAddressData.county,
-            state: st || finalAddressData.state,
+            city:     ct       || finalAddressData.city,
+            township: tw       || finalAddressData.township,
+            county:   county   || finalAddressData.county,
+            state:    st       || finalAddressData.state,
           }
           setAddressData(finalAddressData)
         } else {
@@ -1078,6 +1112,23 @@ export default function RequestPickupPage() {
         />
       )}
 
+      {/* Coverage block — shown above the sticky footer when address is in
+          a restricted franchise zone */}
+      {coverage?.status === 'restricted' && (
+        <div className="mx-4 mb-32 mt-2 rounded-xl border border-red-200 bg-red-50 p-3 flex items-start gap-2">
+          <XCircle size={16} className="text-red-600 mt-0.5 shrink-0" />
+          <div className="text-sm">
+            <p className="font-semibold text-red-800">
+              We can't serve {coverage.zone.city ?? coverage.zone.township ?? coverage.zone.county} yet.
+            </p>
+            <p className="text-red-700 text-xs mt-0.5">
+              Local ordinance reserves trash pickup for an exclusive contracted hauler in this area.
+              {coverage.zone.franchisee_id && ` Look for "${coverage.zone.franchisee_id}" in your local listings.`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Sticky footer */}
       <div className="fixed bottom-[52px] left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 flex items-center justify-between gap-4 z-50">
         <div>
@@ -1087,10 +1138,10 @@ export default function RequestPickupPage() {
         <button
           type="button"
           onClick={handleReview}
-          disabled={!hasItems || !addressData || !photoFile}
+          disabled={!hasItems || !addressData || !photoFile || checkingCoverage || coverage?.status === 'restricted'}
           className="flex-1 bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-50 flex items-center justify-center gap-2"
         >
-          Continue →
+          {coverage?.status === 'restricted' ? 'Outside service area' : 'Continue →'}
         </button>
       </div>
     </div>
