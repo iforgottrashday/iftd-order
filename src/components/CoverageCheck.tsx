@@ -171,6 +171,22 @@ function ResultBanner({ result }: { result: CoverageResult }) {
       </div>
     )
   }
+  if (result.status === 'out_of_area') {
+    return (
+      <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 flex items-start gap-2">
+        <MapPin size={16} className="text-amber-600 mt-0.5 shrink-0" />
+        <div className="text-sm">
+          <p className="font-semibold text-amber-800">
+            Service isn't available in {result.address.county} County, {result.address.state} yet.
+          </p>
+          <p className="text-amber-700 text-xs mt-0.5">
+            We don't have disposal sites arranged in your area.
+            Visit www.iforgottrashday.com to join the waitlist for when we expand.
+          </p>
+        </div>
+      </div>
+    )
+  }
   // Restricted
   const where = result.zone.city ?? result.zone.township ?? result.zone.county
   return (

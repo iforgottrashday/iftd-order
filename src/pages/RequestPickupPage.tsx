@@ -1112,8 +1112,8 @@ export default function RequestPickupPage() {
         />
       )}
 
-      {/* Coverage block — shown above the sticky footer when address is in
-          a restricted franchise zone */}
+      {/* Coverage block — surfaces when the address either lacks disposal-site
+          coverage in the area or sits inside a restricted franchise zone */}
       {coverage?.status === 'restricted' && (
         <div className="mx-4 mb-32 mt-2 rounded-xl border border-red-200 bg-red-50 p-3 flex items-start gap-2">
           <XCircle size={16} className="text-red-600 mt-0.5 shrink-0" />
@@ -1128,6 +1128,20 @@ export default function RequestPickupPage() {
           </div>
         </div>
       )}
+      {coverage?.status === 'out_of_area' && (
+        <div className="mx-4 mb-32 mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
+          <AlertCircle size={16} className="text-amber-600 mt-0.5 shrink-0" />
+          <div className="text-sm">
+            <p className="font-semibold text-amber-800">
+              Service isn't available in {coverage.address.county} County, {coverage.address.state} yet.
+            </p>
+            <p className="text-amber-700 text-xs mt-0.5">
+              We don't have disposal sites arranged in your area.
+              Visit www.iforgottrashday.com to join the waitlist.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Sticky footer */}
       <div className="fixed bottom-[52px] left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 flex items-center justify-between gap-4 z-50">
@@ -1138,10 +1152,15 @@ export default function RequestPickupPage() {
         <button
           type="button"
           onClick={handleReview}
-          disabled={!hasItems || !addressData || !photoFile || checkingCoverage || coverage?.status === 'restricted'}
+          disabled={
+            !hasItems || !addressData || !photoFile || checkingCoverage ||
+            coverage?.status === 'restricted' || coverage?.status === 'out_of_area'
+          }
           className="flex-1 bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-50 flex items-center justify-center gap-2"
         >
-          {coverage?.status === 'restricted' ? 'Outside service area' : 'Continue →'}
+          {coverage?.status === 'restricted' || coverage?.status === 'out_of_area'
+            ? 'Outside service area'
+            : 'Continue →'}
         </button>
       </div>
     </div>
