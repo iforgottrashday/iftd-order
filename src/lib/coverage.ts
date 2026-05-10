@@ -54,12 +54,16 @@ export async function checkCoverage(address: AddressComponents): Promise<Coverag
     return { status: 'unknown', address }
   }
 
-  // ── Gate 1: do we have disposal sites serving this county? ─────────────
+  // ── Gate 1: do we have ACTIVE disposal sites serving this county? ──────
+  // Inner-join with disposal_sites and require is_active=true so a county
+  // whose only listed sites have been deactivated correctly resolves to
+  // out_of_area instead of slipping through on stale service-area rows.
   const { count: serviceAreaCount, error: areaErr } = await supabase
     .from('disposal_site_service_areas')
-    .select('disposal_site_id', { count: 'exact', head: true })
+    .select('disposal_site_id, disposal_sites!inner(id)', { count: 'exact', head: true })
     .eq('state', address.state)
     .eq('county', address.county)
+    .eq('disposal_sites.is_active', true)
 
   if (areaErr) {
     console.warn('[coverage] service-area lookup failed:', areaErr.message)
