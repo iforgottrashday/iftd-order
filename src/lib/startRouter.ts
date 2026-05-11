@@ -37,6 +37,7 @@ export type StartRouteResult =
 interface FranchiseeAreaRow {
   franchisee_id: string
   city:          string | null
+  is_excluded:   boolean
   franchisees:   { display_name: string } | { display_name: string }[] | null
 }
 
@@ -51,9 +52,12 @@ export async function resolveStartRoute(address: AddressComponents): Promise<Sta
   }
 
   // ── Step 1: any franchisee covering this county? ───────────────────────────
+  // Resolver priority: a city-level row (whether include or exclude) overrides
+  // any county-wide row. An is_excluded city carves the address out of the
+  // franchisee's service area and falls through to the next gate.
   const { data: areaRows, error: areaErr } = await supabase
     .from('franchisee_service_areas')
-    .select('franchisee_id, city, franchisees!inner(display_name)')
+    .select('franchisee_id, city, is_excluded, franchisees!inner(display_name)')
     .eq('state', address.state)
     .eq('county', address.county)
     .eq('is_active', true)
@@ -63,12 +67,20 @@ export async function resolveStartRoute(address: AddressComponents): Promise<Sta
     // Fall through — we'll try the other gates rather than block.
   } else {
     const rows = (areaRows ?? []) as unknown as FranchiseeAreaRow[]
-    // Prefer a city-specific match if one matches the resolved locality;
-    // otherwise take any county-wide row (city IS NULL).
-    const cityMatch = address.city
+
+    const cityRow = address.city
       ? rows.find(r => r.city && r.city.toLowerCase() === address.city.toLowerCase())
       : undefined
-    const match = cityMatch ?? rows.find(r => !r.city)
+
+    // Explicit city-level row wins. If it's an exclusion we skip the
+    // commercial branch entirely; if it's an inclusion we route there.
+    let match: FranchiseeAreaRow | undefined
+    if (cityRow && !cityRow.is_excluded) {
+      match = cityRow
+    } else if (!cityRow) {
+      match = rows.find(r => !r.city && !r.is_excluded)
+    }
+
     if (match) {
       const fr = Array.isArray(match.franchisees) ? match.franchisees[0] : match.franchisees
       return {
