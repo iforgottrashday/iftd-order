@@ -167,14 +167,14 @@ export default function StartPage() {
         <DirectCard
           icon={<Building2 size={20} className="text-white" />}
           iconBg="#1A73E8"
-          title="I have a commercial pickup"
-          subtitle="Business waste, construction debris, or large items handled by our franchise partner."
+          title="Use my trash company"
+          subtitle="My community has a contract to take care of this."
           href="https://local.iforgottrashday.com/"
         />
         <DirectCard
           icon={<Users size={20} className="text-white" />}
           iconBg="#FF6600"
-          title="I missed my residential trash day"
+          title="Crowd source trash pickup"
           subtitle="Same-day or scheduled pickup by neighbors who care. No judgment — just help."
           href="https://order.iforgottrashday.com/"
         />
