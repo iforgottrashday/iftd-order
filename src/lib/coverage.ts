@@ -17,6 +17,7 @@
 
 import { supabase } from './supabase'
 import type { AddressComponents } from './googleMaps'
+import { normalizeStateAbbrev } from './state'
 
 export interface FranchiseZone {
   id:            string
@@ -54,6 +55,12 @@ export async function checkCoverage(address: AddressComponents): Promise<Coverag
     return { status: 'unknown', address }
   }
 
+  // Normalize state to the 2-letter code the DB stores. Address-extraction
+  // paths can hand us either form ("OH" or "Ohio"); without this, restored
+  // or GPS-derived addresses with a long state name return zero rows and
+  // wrongly resolve to out_of_area.
+  const state = normalizeStateAbbrev(address.state)
+
   // ── Gate 1: do we have ACTIVE disposal sites serving this county? ──────
   // Inner-join with disposal_sites and require is_active=true so a county
   // whose only listed sites have been deactivated correctly resolves to
@@ -61,7 +68,7 @@ export async function checkCoverage(address: AddressComponents): Promise<Coverag
   const { count: serviceAreaCount, error: areaErr } = await supabase
     .from('disposal_site_service_areas')
     .select('disposal_site_id, disposal_sites!inner(id)', { count: 'exact', head: true })
-    .eq('state', address.state)
+    .eq('state', state)
     .eq('county', address.county)
     .eq('disposal_sites.is_active', true)
 
@@ -76,7 +83,7 @@ export async function checkCoverage(address: AddressComponents): Promise<Coverag
   const { data: zoneRows, error: zoneErr } = await supabase
     .from('franchise_zones')
     .select('id, franchisee_id, city, township, county, state, notes')
-    .eq('state', address.state)
+    .eq('state', state)
     .eq('county', address.county)
     .eq('is_active', true)
 

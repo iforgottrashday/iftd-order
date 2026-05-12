@@ -22,6 +22,7 @@
 
 import { supabase } from './supabase'
 import type { AddressComponents } from './googleMaps'
+import { normalizeStateAbbrev } from './state'
 
 export interface RouterFranchisee {
   id:          string
@@ -51,6 +52,10 @@ export async function resolveStartRoute(address: AddressComponents): Promise<Sta
     return { destination: 'unknown', address }
   }
 
+  // Normalize state to the 2-letter code the DB stores. See coverage.ts for
+  // the full rationale.
+  const state = normalizeStateAbbrev(address.state)
+
   // ── Step 1: any franchisee covering this county? ───────────────────────────
   // Resolver priority: a city-level row (whether include or exclude) overrides
   // any county-wide row. An is_excluded city carves the address out of the
@@ -58,7 +63,7 @@ export async function resolveStartRoute(address: AddressComponents): Promise<Sta
   const { data: areaRows, error: areaErr } = await supabase
     .from('franchisee_service_areas')
     .select('franchisee_id, city, is_excluded, franchisees!inner(display_name)')
-    .eq('state', address.state)
+    .eq('state', state)
     .eq('county', address.county)
     .eq('is_active', true)
 
@@ -98,7 +103,7 @@ export async function resolveStartRoute(address: AddressComponents): Promise<Sta
   const { data: zoneRows, error: zoneErr } = await supabase
     .from('franchise_zones')
     .select('city, township')
-    .eq('state', address.state)
+    .eq('state', state)
     .eq('county', address.county)
     .eq('is_active', true)
 
@@ -122,7 +127,7 @@ export async function resolveStartRoute(address: AddressComponents): Promise<Sta
   const { count: siteCount, error: siteErr } = await supabase
     .from('disposal_site_service_areas')
     .select('disposal_site_id, disposal_sites!inner(id)', { count: 'exact', head: true })
-    .eq('state', address.state)
+    .eq('state', state)
     .eq('county', address.county)
     .eq('disposal_sites.is_active', true)
 
