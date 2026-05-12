@@ -39,15 +39,10 @@ interface OrderState {
   }
 }
 
-// ── Load number generation ────────────────────────────────────────────────────
-const LOAD_NUMBER_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-function generateLoadNumber(): string {
-  let result = ''
-  for (let i = 0; i < 8; i++) {
-    result += LOAD_NUMBER_CHARS[Math.floor(Math.random() * LOAD_NUMBER_CHARS.length)]
-  }
-  return result
-}
+// Note: load_number is intentionally NOT generated at order create. A load
+// is a physical disposal-site trip, which only exists after a hauler picks
+// up the order. The newer hauls/loads/items model assigns load numbers at
+// pickup time; this file just leaves the legacy load_number column NULL.
 
 // ── Disposal stop generation ──────────────────────────────────────────────────
 async function generateDisposalStops(
@@ -116,7 +111,7 @@ async function generateDisposalStops(
     disposal_site_id: siteId,
     materials: mats,
     status: 'pending',
-    load_number: generateLoadNumber(),
+    load_number: null as string | null,
   }))
 
   if (stops.length > 0) {
