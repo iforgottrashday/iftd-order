@@ -4,12 +4,18 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { initGoogleMaps, parseAddressComponents } from '@/lib/googleMaps'
 import { checkCoverage } from '@/lib/coverage'
+import { fetchZonePrice, type FetchZonePriceResult } from '@/lib/pricing'
 import { Minus, Plus, Camera, MapPin, Search, Zap, CalendarDays, Clock, Lock, AlertCircle, X, XCircle } from 'lucide-react'
 import { MapContainer, TileLayer, useMapEvents, useMap } from 'react-leaflet'
 
-// Pricing constants
-const ITEM_PRICE         = 20   // $20 per item (all types)
-const UNBAGGED_SURCHARGE = 5    // +$5 for unbagged trash option
+// Fallback per-bin price used before an address is entered (and as a defensive
+// floor while the zone lookup is in flight). Once the customer's address is
+// resolved, this gets replaced with the zone's real per-bin price from
+// fetchZonePrice(). If the zone has no priceable disposal site, the order is
+// blocked before checkout — see the gate on the Continue button.
+const FALLBACK_ITEM_PRICE = 20
+const UNBAGGED_SURCHARGE  = 5    // +$5 for unbagged trash option (flat for now;
+                                 //   future: may scale per zone)
 
 const SERVICE_START = 7   // 7am
 const SERVICE_END   = 15  // generates slots up to and including 2pm
@@ -656,6 +662,28 @@ export default function RequestPickupPage() {
     })
     return () => { cancelled = true }
   }, [addressData?.address, addressData?.county, addressData?.state, addressData?.city, addressData?.township])
+
+  // Zone pricing — runs alongside the coverage check. Resolves the per-bin
+  // price for the customer's county via the canonical formula RPC. While the
+  // lookup is pending or for addresses not yet entered, we render the
+  // fallback price; on resolve we swap to the real number. If the zone has
+  // no priceable disposal site, the submit button is gated below.
+  const [zonePrice, setZonePrice] = useState<FetchZonePriceResult | null>(null)
+  const [fetchingPrice, setFetchingPrice] = useState(false)
+  useEffect(() => {
+    if (!addressData?.county || !addressData?.state) { setZonePrice(null); return }
+    let cancelled = false
+    setFetchingPrice(true)
+    fetchZonePrice(addressData.state, addressData.county)
+      .then(result => { if (!cancelled) setZonePrice(result) })
+      .finally(() => { if (!cancelled) setFetchingPrice(false) })
+    return () => { cancelled = true }
+  }, [addressData?.county, addressData?.state])
+
+  // Active per-bin price the UI math + display uses. Falls back to the
+  // hardcoded constant until the zone lookup resolves with a real number.
+  const itemPrice =
+    zonePrice?.status === 'priced' ? zonePrice.zone.pricePerBin : FALLBACK_ITEM_PRICE
   const [homeAddress, setHomeAddress] = useState(() => restore?.address ?? '')
   const [trashQty, setTrashQty] = useState(() =>
     restore?.items?.find(i => i.product_id === 'trash')?.quantity ?? 0
@@ -738,9 +766,11 @@ export default function RequestPickupPage() {
     if (unbaggedRecyclingQty > v) setUnbaggedRecyclingQty(v)
   }
 
-  // Pricing: $20/item + $5 per unbagged item (trash or recycling)
-  const trashSubtotal     = ITEM_PRICE * trashQty + UNBAGGED_SURCHARGE * unbaggedTrashQty
-  const recyclingSubtotal = ITEM_PRICE * recyclingQty + UNBAGGED_SURCHARGE * unbaggedRecyclingQty
+  // Pricing: itemPrice per bin + $5 per unbagged item. itemPrice comes from
+  // the zone lookup (Rumpke → $25, Gulf Breeze → $45, etc.) or falls back to
+  // the constant until the address is entered.
+  const trashSubtotal     = itemPrice * trashQty + UNBAGGED_SURCHARGE * unbaggedTrashQty
+  const recyclingSubtotal = itemPrice * recyclingQty + UNBAGGED_SURCHARGE * unbaggedRecyclingQty
   const total    = trashSubtotal + recyclingSubtotal
   const hasItems = trashQty > 0 || recyclingQty > 0
 
@@ -846,6 +876,21 @@ export default function RequestPickupPage() {
       items.push({ product_id: 'recycling', label: 'Recycling', quantity: recyclingQty, unbagged_qty: unbaggedRecyclingQty })
     }
 
+    // Snapshot the zone pricing onto the navigate state so checkout can carry
+    // it onto orders.pricing — historical orders stay priced at whatever the
+    // zone said at the time, even if the disposal_cost on the anchor site
+    // changes later.
+    const zoneSnapshot = zonePrice?.status === 'priced' ? {
+      pricePerBin:      zonePrice.zone.pricePerBin,
+      anchorSiteId:     zonePrice.zone.anchorSiteId,
+      anchorSiteName:   zonePrice.zone.anchorSiteName,
+      dumpCostUsed:     zonePrice.zone.dumpCostUsed,
+      processingCharge: zonePrice.zone.processingCharge,
+      commission:       zonePrice.zone.commission,
+      breakevenBins:    zonePrice.zone.breakevenBins,
+      roundingStep:     zonePrice.zone.roundingStep,
+    } : null
+
     navigate('/checkout', {
       state: {
         address: finalAddressData.address,
@@ -860,7 +905,15 @@ export default function RequestPickupPage() {
         notes,
         privateNotes,
         photoFile,
-        pricing: { subtotal: total, disposalFee: 0, serviceFee: 0, total },
+        pricing: {
+          subtotal:        total,
+          disposalFee:     0,
+          serviceFee:      0,
+          total,
+          itemPrice,           // resolved per-bin price actually used
+          unbaggedSurcharge:   UNBAGGED_SURCHARGE,
+          zone:                zoneSnapshot,
+        },
       },
     })
   }
@@ -977,7 +1030,7 @@ export default function RequestPickupPage() {
             <img src={PRODUCT_IMAGES.trash} alt="Trash" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Residential Trash</p>
-              <p className="text-xs text-[#666666]">$20/item · 96 gal max</p>
+              <p className="text-xs text-[#666666]">${itemPrice}/item · 96 gal max</p>
             </div>
             <p className="text-[#1A73E8] font-bold text-base">${trashSubtotal > 0 ? trashSubtotal.toFixed(0) : '0'}</p>
           </div>
@@ -1000,7 +1053,7 @@ export default function RequestPickupPage() {
             <img src={PRODUCT_IMAGES.recycling} alt="Recycling" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Recycling</p>
-              <p className="text-xs text-[#666666]">$20/item · 96 gal max</p>
+              <p className="text-xs text-[#666666]">${itemPrice}/item · 96 gal max</p>
             </div>
             <p className="text-[#1A73E8] font-bold text-base">${recyclingSubtotal > 0 ? recyclingSubtotal.toFixed(0) : '0'}</p>
           </div>
@@ -1143,6 +1196,24 @@ export default function RequestPickupPage() {
         </div>
       )}
 
+      {/* Pricing-not-configured block: address resolved + zone is covered, but
+          no bin-accepting disposal site in this county has a known
+          disposal_cost yet. Block the order rather than show a bogus default. */}
+      {coverage?.status === 'available' && zonePrice?.status === 'no-data' && (
+        <div className="mx-4 mb-32 mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 flex items-start gap-2">
+          <AlertCircle size={16} className="text-amber-600 mt-0.5 shrink-0" />
+          <div className="text-sm">
+            <p className="font-semibold text-amber-800">
+              Pricing isn't set up for {addressData?.county} County, {addressData?.state} yet.
+            </p>
+            <p className="text-amber-700 text-xs mt-0.5">
+              We serve your area, but we still need to confirm disposal-site rates.
+              Email <a href="mailto:support@iforgottrashday.com" className="underline">support@iforgottrashday.com</a> and we'll get you onboarded.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Sticky footer */}
       <div className="fixed bottom-[52px] left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 flex items-center justify-between gap-4 z-50">
         <div>
@@ -1154,13 +1225,19 @@ export default function RequestPickupPage() {
           onClick={handleReview}
           disabled={
             !hasItems || !addressData || !photoFile || checkingCoverage ||
-            coverage?.status === 'restricted' || coverage?.status === 'out_of_area'
+            fetchingPrice ||
+            coverage?.status === 'restricted' || coverage?.status === 'out_of_area' ||
+            zonePrice?.status === 'no-data'
           }
           className="flex-1 bg-[#1A73E8] text-white font-semibold py-4 rounded-xl text-base disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {coverage?.status === 'restricted' || coverage?.status === 'out_of_area'
             ? 'Outside service area'
-            : 'Continue →'}
+            : zonePrice?.status === 'no-data'
+              ? 'Pricing pending'
+              : fetchingPrice
+                ? 'Loading price…'
+                : 'Continue →'}
         </button>
       </div>
     </div>

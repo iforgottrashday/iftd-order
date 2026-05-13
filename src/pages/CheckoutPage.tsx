@@ -36,6 +36,20 @@ interface OrderState {
     disposalFee: number
     serviceFee: number
     total: number
+    // Zone-pricing snapshot (optional during the rollout window; pre-snapshot
+    // orders may have a flat $20 itemPrice missing).
+    itemPrice?: number
+    unbaggedSurcharge?: number
+    zone?: {
+      pricePerBin:      number
+      anchorSiteId:     string
+      anchorSiteName:   string
+      dumpCostUsed:     number
+      processingCharge: number
+      commission:       number
+      breakevenBins:    number
+      roundingStep:     number
+    } | null
   }
 }
 
