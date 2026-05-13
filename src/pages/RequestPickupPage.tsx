@@ -684,6 +684,11 @@ export default function RequestPickupPage() {
   // hardcoded constant until the zone lookup resolves with a real number.
   const itemPrice =
     zonePrice?.status === 'priced' ? zonePrice.zone.pricePerBin : FALLBACK_ITEM_PRICE
+
+  // Whether we have a confirmed price to display. Used to hide $/item labels
+  // and the running subtotal until the customer's county resolves — showing
+  // a fallback alongside a "pricing pending" warning was self-contradictory.
+  const priceKnown = zonePrice?.status === 'priced'
   const [homeAddress, setHomeAddress] = useState(() => restore?.address ?? '')
   const [trashQty, setTrashQty] = useState(() =>
     restore?.items?.find(i => i.product_id === 'trash')?.quantity ?? 0
@@ -1030,9 +1035,13 @@ export default function RequestPickupPage() {
             <img src={PRODUCT_IMAGES.trash} alt="Trash" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Residential Trash</p>
-              <p className="text-xs text-[#666666]">${itemPrice}/item · 96 gal max</p>
+              <p className="text-xs text-[#666666]">
+                {priceKnown ? `$${itemPrice}/item · 96 gal max` : '96 gal max'}
+              </p>
             </div>
-            <p className="text-[#1A73E8] font-bold text-base">${trashSubtotal > 0 ? trashSubtotal.toFixed(0) : '0'}</p>
+            {priceKnown && (
+              <p className="text-[#1A73E8] font-bold text-base">${trashSubtotal > 0 ? trashSubtotal.toFixed(0) : '0'}</p>
+            )}
           </div>
           <BigStepper value={trashQty} min={0} max={10} onChange={handleTrashQtyChange} />
           {trashQty > 0 && (
@@ -1053,9 +1062,13 @@ export default function RequestPickupPage() {
             <img src={PRODUCT_IMAGES.recycling} alt="Recycling" className="w-12 h-12 rounded-lg object-contain bg-[#F5F5F5] p-1" />
             <div className="flex-1">
               <p className="font-semibold text-[#1A1A1A]">Recycling</p>
-              <p className="text-xs text-[#666666]">${itemPrice}/item · 96 gal max</p>
+              <p className="text-xs text-[#666666]">
+                {priceKnown ? `$${itemPrice}/item · 96 gal max` : '96 gal max'}
+              </p>
             </div>
-            <p className="text-[#1A73E8] font-bold text-base">${recyclingSubtotal > 0 ? recyclingSubtotal.toFixed(0) : '0'}</p>
+            {priceKnown && (
+              <p className="text-[#1A73E8] font-bold text-base">${recyclingSubtotal > 0 ? recyclingSubtotal.toFixed(0) : '0'}</p>
+            )}
           </div>
           <BigStepper value={recyclingQty} min={0} max={10} onChange={handleRecyclingQtyChange} />
           {recyclingQty > 0 && (
@@ -1218,7 +1231,11 @@ export default function RequestPickupPage() {
       <div className="fixed bottom-[52px] left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-[#E0E0E0] px-4 py-4 flex items-center justify-between gap-4 z-50">
         <div>
           <p className="text-xs text-[#666666]">Estimated Total</p>
-          <p className="text-2xl font-bold text-[#1A73E8]">${total.toFixed(2)}</p>
+          {priceKnown ? (
+            <p className="text-2xl font-bold text-[#1A73E8]">${total.toFixed(2)}</p>
+          ) : (
+            <p className="text-2xl font-bold text-[#BDBDBD]">—</p>
+          )}
         </div>
         <button
           type="button"
