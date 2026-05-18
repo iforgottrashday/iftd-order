@@ -11,6 +11,7 @@
 // silently — at this stage we'd rather fail loudly than under-bill.
 
 import { supabase } from './supabase'
+import { normalizeStateAbbrev } from './state'
 
 export interface ZonePrice {
   pricePerBin:      number    // What the customer pays per bin in this county
@@ -42,8 +43,16 @@ export async function fetchZonePrice(
     return { status: 'no-data', reason: 'No bin disposal site with a known cost serves this county yet.' }
   }
 
+  // Normalize state to the 2-letter code the DB stores. Saved/restored
+  // addresses can carry the long form ("Ohio") while Google Places returns
+  // the short form ("OH"); without this the RPC sees a different literal
+  // and returns no anchor — symptom: page shows "pricing isn't set up" on
+  // initial load with the restored address, then flips to priced after the
+  // user reselects the same address from the autocomplete.
+  const normalizedState = normalizeStateAbbrev(state)
+
   const { data, error } = await supabase.rpc('get_zone_price_per_bin', {
-    p_state:  state,
+    p_state:  normalizedState,
     p_county: county,
   })
 
